@@ -14,15 +14,17 @@
         </button>
       </div>
 
-      <div v-if="cameraActive" class="camera-view">
-        <div class="camera-container">
-          <video ref="videoElement" autoplay playsinline></video>
-          <div class="scanner-overlay">
-            <div class="scanner-box"></div>
+      <div v-if="cameraActive" class="camera-modal">
+        <div class="camera-modal-content">
+          <div class="camera-container" :class="{ 'scan-success': scanFlash }">
+            <video ref="videoElement" autoplay playsinline></video>
+            <div class="scanner-overlay">
+              <div class="scanner-box"></div>
+            </div>
           </div>
+          <p class="camera-hint">Position QR code within the frame</p>
+          <button @click="stopCamera" class="btn-stop">Stop Camera</button>
         </div>
-        <p class="camera-hint">Position QR code within the frame</p>
-        <button @click="stopCamera" class="btn-stop">Stop Camera</button>
       </div>
 
       <div v-if="verificationResult" class="result-card" :class="resultClass">
@@ -99,6 +101,7 @@ export default {
     const error = ref('');
     const stream = ref(null);
     const animationFrame = ref(null);
+    const scanFlash = ref(false);
 
     const resultClass = ref('');
     const resultIcon = ref('');
@@ -223,6 +226,12 @@ export default {
     };
 
     const handleQRCode = async (data) => {
+      // Trigger green flash animation
+      scanFlash.value = true;
+      setTimeout(() => {
+        scanFlash.value = false;
+      }, 500);
+
       stopCamera();
       
       // Extract UUID from QR code data
@@ -286,6 +295,7 @@ export default {
       resultIcon.value = '';
       resultTitle.value = '';
       resultMessage.value = '';
+      scanFlash.value = false;
     };
 
     const formatTicketType = (type, subtype) => {
@@ -348,6 +358,7 @@ export default {
       resultIcon,
       resultTitle,
       resultMessage,
+      scanFlash,
       startCamera,
       stopCamera,
       resetScanner,
@@ -424,6 +435,35 @@ export default {
   font-size: 18px;
   cursor: pointer;
   box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+  transition: transform 0.2s;
+}
+
+.btn-camera:hover {
+  transform: scale(1.05);
+}
+
+.btn-camera:active {
+  transform: scale(0.98);
+}
+
+.camera-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.camera-modal-content {
+  width: 100%;
+  max-width: 600px;
+  text-align: center;
 }
 
 .camera-view {
@@ -436,6 +476,24 @@ export default {
   border-radius: 15px;
   overflow: hidden;
   margin-bottom: 15px;
+  border: 5px solid transparent;
+  transition: border-color 0.3s ease;
+}
+
+.camera-container.scan-success {
+  border-color: #4CAF50;
+  animation: flashGreen 0.5s ease;
+}
+
+@keyframes flashGreen {
+  0%, 100% {
+    border-color: transparent;
+    box-shadow: none;
+  }
+  50% {
+    border-color: #4CAF50;
+    box-shadow: 0 0 30px rgba(76, 175, 80, 0.8);
+  }
 }
 
 video {
@@ -463,8 +521,9 @@ video {
 }
 
 .camera-hint {
-  color: #666;
+  color: #fff;
   margin-bottom: 15px;
+  font-size: 14px;
 }
 
 .btn-stop {
@@ -475,6 +534,11 @@ video {
   border-radius: 8px;
   cursor: pointer;
   font-size: 16px;
+  transition: background 0.2s;
+}
+
+.btn-stop:hover {
+  background: #d32f2f;
 }
 
 .result-card {
