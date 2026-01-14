@@ -92,6 +92,10 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
   }
   detailsHtml += `<p><strong>Type:</strong> ${ticketLabel}</p>`;
 
+  // Convert base64 QR code to buffer for attachment
+  const base64Data = qrCodeDataUrl.replace(/^data:image\/png;base64,/, '');
+  const qrCodeBuffer = Buffer.from(base64Data, 'base64');
+
   const mailOptions = {
     from: process.env.EMAIL_FROM,
     to: to,
@@ -161,7 +165,7 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
             
             <div class="qr-code">
               <p><strong>Your Ticket QR Code:</strong></p>
-              <img src="${qrCodeDataUrl}" alt="Ticket QR Code" />
+              <img src="cid:qrcode" alt="Ticket QR Code" />
               <p>Scan this QR code at the convention entrance</p>
             </div>
             
@@ -178,6 +182,13 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
       </body>
       </html>
     `,
+    attachments: [
+      {
+        filename: 'qrcode.png',
+        content: qrCodeBuffer,
+        cid: 'qrcode' // Same as the cid value in the img src
+      }
+    ]
   };
 
   return transporter.sendMail(mailOptions);
