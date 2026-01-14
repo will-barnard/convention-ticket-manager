@@ -73,9 +73,8 @@ export default {
       try {
         const response = await axios.get('/api/settings');
         if (response.data.logo_url) {
-          logoUrl.value = response.data.logo_url.startsWith('http') 
-            ? response.data.logo_url 
-            : `http://localhost:3000${response.data.logo_url}`;
+          // Logo is served through nginx proxy at /uploads
+          logoUrl.value = response.data.logo_url;
         }
         if (response.data.convention_name) {
           conventionName.value = response.data.convention_name;

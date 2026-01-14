@@ -369,7 +369,8 @@ export default {
 
     const getLogoUrl = (logoUrl) => {
       if (!logoUrl) return '';
-      return logoUrl.startsWith('http') ? logoUrl : `http://localhost:3000${logoUrl}`;
+      // Logo is served through nginx proxy at /uploads
+      return logoUrl;
     };
 
     const showChangePassword = () => {
