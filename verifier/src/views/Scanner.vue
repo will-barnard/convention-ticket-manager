@@ -111,6 +111,7 @@ export default {
     const startCamera = async () => {
       try {
         error.value = '';
+        console.log('Starting camera...');
         
         // Check if mediaDevices is available
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -128,14 +129,18 @@ export default {
           audio: false
         };
 
+        console.log('Requesting camera access...');
         stream.value = await navigator.mediaDevices.getUserMedia(constraints);
+        console.log('Camera stream obtained:', stream.value);
         
         if (videoElement.value) {
           videoElement.value.srcObject = stream.value;
           cameraActive.value = true;
+          console.log('Camera activated, video element set');
           
           // Wait for video to be ready before scanning
           videoElement.value.onloadedmetadata = () => {
+            console.log('Video metadata loaded, starting playback');
             videoElement.value.play();
             scanQRCode();
           };
@@ -498,7 +503,10 @@ export default {
 
 video {
   width: 100%;
+  height: auto;
+  min-height: 300px;
   display: block;
+  background: #000;
 }
 
 .scanner-overlay {
