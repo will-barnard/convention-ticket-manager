@@ -374,6 +374,7 @@ export default {
       cameraActive,
       verificationResult,
       ticketData,
+      error,
       resultClass,
       resultIcon,
       resultTitle,
