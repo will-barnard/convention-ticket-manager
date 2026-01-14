@@ -71,12 +71,6 @@
               Scan Another Ticket
             </button>
           </div>
-
-          <!-- Show error below camera -->
-          <div v-if="error" class="error-card">
-            <p>{{ error }}</p>
-            <button @click="clearError" class="btn-retry">Try Again</button>
-          </div>
         </div>
       </div>
     </div>
@@ -259,12 +253,9 @@ export default {
       const uuidMatch = data.match(/\/verify\/([a-f0-9-]+)/i);
       
       if (!uuidMatch) {
-        error.value = 'Invalid QR code format';
-        // Resume scanning after error
-        setTimeout(() => {
-          error.value = '';
-          scanQRCode();
-        }, 2000);
+        console.error('Invalid QR code format:', data);
+        // Just resume scanning silently
+        scanQRCode();
         return;
       }
 
@@ -308,14 +299,14 @@ export default {
         }
       } catch (err) {
         console.error('Verification error:', err);
-        error.value = 'Failed to verify ticket. Please try again.';
+        // Just resume scanning silently on error
+        scanQRCode();
       }
     };
 
     const resetScanner = () => {
       verificationResult.value = null;
       ticketData.value = null;
-      error.value = '';
       resultClass.value = '';
       resultIcon.value = '';
       resultTitle.value = '';
@@ -323,14 +314,6 @@ export default {
       scanFlash.value = false;
       
       // Resume scanning
-      if (cameraActive.value) {
-        scanQRCode();
-      }
-    };
-
-    const clearError = () => {
-      error.value = '';
-      // Resume scanning after clearing error
       if (cameraActive.value) {
         scanQRCode();
       }
@@ -391,7 +374,6 @@ export default {
       cameraActive,
       verificationResult,
       ticketData,
-      error,
       resultClass,
       resultIcon,
       resultTitle,
@@ -400,7 +382,6 @@ export default {
       startCamera,
       stopCamera,
       resetScanner,
-      clearError,
       formatTicketType,
       formatDay,
       formatAllowedDays,
