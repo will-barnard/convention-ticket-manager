@@ -213,4 +213,22 @@ input:focus {
 .toggle-mode a:hover {
   text-decoration: underline;
 }
+
+.logo-container {
+  text-align: center;
+  margin-bottom: 20px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.convention-logo {
+  max-width: 100%;
+  max-height: 120px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
+}
 </style>

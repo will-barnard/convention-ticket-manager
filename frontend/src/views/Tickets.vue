@@ -1,13 +1,6 @@
 <template>
   <div class="tickets">
-    <header class="header">
-      <h1>Convention Ticket Manager</h1>
-      <div class="header-actions">
-        <span>Welcome, {{ authStore.user?.username }}</span>
-        <button @click="showChangePassword" class="btn-secondary">Change Password</button>
-        <button @click="handleLogout" class="btn-secondary">Logout</button>
-      </div>
-    </header>
+    <PageHeader @change-password="showChangePassword" @logout="handleLogout" />
 
     <ChangePasswordModal v-if="isChangePasswordOpen" @close="isChangePasswordOpen = false" />
 
@@ -15,7 +8,7 @@
       <nav class="nav-tabs">
         <router-link to="/" class="nav-tab" exact-active-class="active">Dashboard</router-link>
         <router-link to="/tickets" class="nav-tab" active-class="active">Tickets</router-link>
-        <router-link to="/usage" class="nav-tab" active-class="active">Usage</router-link>
+        <router-link to="/stats" class="nav-tab" active-class="active">Stats</router-link>
         <router-link to="/settings" class="nav-tab" active-class="active">Settings</router-link>
       </nav>
 
@@ -115,11 +108,13 @@ import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import axios from 'axios';
 import ChangePasswordModal from '@/components/ChangePasswordModal.vue';
+import PageHeader from '@/components/PageHeader.vue';
 
 export default {
   name: 'Tickets',
   components: {
     ChangePasswordModal,
+    PageHeader,
   },
   setup() {
     const router = useRouter();
@@ -234,26 +229,6 @@ export default {
 .tickets {
   min-height: 100vh;
   background: #f5f5f5;
-}
-
-.header {
-  background: white;
-  padding: 20px 40px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.header h1 {
-  margin: 0;
-  color: #333;
-}
-
-.header-actions {
-  display: flex;
-  gap: 15px;
-  align-items: center;
 }
 
 .container {

@@ -1,13 +1,6 @@
 <template>
-  <div class="usage">
-    <header class="header">
-      <h1>Convention Ticket Manager</h1>
-      <div class="header-actions">
-        <span>Welcome, {{ authStore.user?.username }}</span>
-        <button @click="showChangePassword" class="btn-secondary">Change Password</button>
-        <button @click="handleLogout" class="btn-secondary">Logout</button>
-      </div>
-    </header>
+  <div class="stats">
+    <PageHeader @change-password="showChangePassword" @logout="handleLogout" />
 
     <ChangePasswordModal v-if="isChangePasswordOpen" @close="isChangePasswordOpen = false" />
 
@@ -15,7 +8,7 @@
       <nav class="nav-tabs">
         <router-link to="/" class="nav-tab" exact-active-class="active">Dashboard</router-link>
         <router-link to="/tickets" class="nav-tab" active-class="active">Tickets</router-link>
-        <router-link to="/usage" class="nav-tab" active-class="active">Usage</router-link>
+        <router-link to="/stats" class="nav-tab" active-class="active">Stats</router-link>
         <router-link to="/settings" class="nav-tab" active-class="active">Settings</router-link>
       </nav>
 
@@ -31,8 +24,8 @@
         <router-link to="/settings" class="btn-primary">Go to Settings</router-link>
       </div>
 
-      <div v-else class="usage-content">
-        <h2>Ticket Usage by Day</h2>
+      <div v-else class="stats-content">
+        <h2>Ticket Statistics by Day</h2>
         
         <div class="stats-grid">
           <div v-for="day in stats" :key="day.day" class="day-card">
@@ -96,11 +89,13 @@ import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import axios from 'axios';
 import ChangePasswordModal from '@/components/ChangePasswordModal.vue';
+import PageHeader from '@/components/PageHeader.vue';
 
 export default {
-  name: 'Usage',
+  name: 'Stats',
   components: {
     ChangePasswordModal,
+    PageHeader,
   },
   setup() {
     const router = useRouter();
@@ -129,7 +124,7 @@ export default {
       error.value = '';
       
       try {
-        const response = await axios.get('/api/usage');
+        const response = await axios.get('/api/stats');
         stats.value = response.data.stats || [];
       } catch (err) {
         console.error('Error loading usage stats:', err);
@@ -182,7 +177,7 @@ export default {
 </script>
 
 <style scoped>
-.usage {
+.stats {
   min-height: 100vh;
   background: #f5f5f5;
 }
@@ -301,7 +296,7 @@ export default {
   background: #5568d3;
 }
 
-.usage-content h2 {
+.stats-content h2 {
   color: #333;
   margin-bottom: 30px;
   font-size: 28px;

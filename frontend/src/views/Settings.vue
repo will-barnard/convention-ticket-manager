@@ -1,13 +1,6 @@
 <template>
   <div class="settings">
-    <header class="header">
-      <h1>Convention Ticket Manager</h1>
-      <div class="header-actions">
-        <span>Welcome, {{ authStore.user?.username }}</span>
-        <button @click="showChangePassword" class="btn-secondary">Change Password</button>
-        <button @click="handleLogout" class="btn-secondary">Logout</button>
-      </div>
-    </header>
+    <PageHeader @change-password="showChangePassword" @logout="handleLogout" />
 
     <ChangePasswordModal v-if="isChangePasswordOpen" @close="isChangePasswordOpen = false" />
 
@@ -15,7 +8,7 @@
       <nav class="nav-tabs">
         <router-link to="/" class="nav-tab" exact-active-class="active">Dashboard</router-link>
         <router-link to="/tickets" class="nav-tab" active-class="active">Tickets</router-link>
-        <router-link to="/usage" class="nav-tab" active-class="active">Usage</router-link>
+        <router-link to="/stats" class="nav-tab" active-class="active">Stats</router-link>
         <router-link to="/settings" class="nav-tab" active-class="active">Settings</router-link>
       </nav>
 
@@ -39,23 +32,32 @@
             <div class="logo-upload-area">
               <div v-if="settings.logo_url || logoPreview" class="logo-preview">
                 <img :src="logoPreview || getLogoUrl(settings.logo_url)" alt="Convention Logo" />
-                <button type="button" @click="removeLogo" class="btn-remove-logo">
-                  ✕ Remove Logo
-                </button>
               </div>
               <div v-else class="logo-placeholder">
                 <p>📷 No logo uploaded</p>
               </div>
-              <input
-                type="file"
-                ref="logoInput"
-                @change="handleLogoSelect"
-                accept="image/*"
-                style="display: none"
-              />
-              <button type="button" @click="$refs.logoInput.click()" class="btn-upload">
-                {{ settings.logo_url ? 'Change Logo' : 'Upload Logo' }}
-              </button>
+              
+              <div class="logo-buttons">
+                <input
+                  type="file"
+                  ref="logoInput"
+                  @change="handleLogoSelect"
+                  accept="image/*"
+                  style="display: none"
+                />
+                <button type="button" @click="$refs.logoInput.click()" class="btn-upload">
+                  {{ settings.logo_url ? 'Change Logo' : 'Upload Logo' }}
+                </button>
+                <button 
+                  v-if="settings.logo_url || logoPreview" 
+                  type="button" 
+                  @click="removeLogo" 
+                  class="btn-remove-logo"
+                >
+                  Remove Logo
+                </button>
+              </div>
+              
               <p class="hint">Recommended: PNG or JPG, max 5MB</p>
             </div>
           </div>
@@ -191,11 +193,13 @@ import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import axios from 'axios';
 import ChangePasswordModal from '@/components/ChangePasswordModal.vue';
+import PageHeader from '@/components/PageHeader.vue';
 
 export default {
   name: 'Settings',
   components: {
     ChangePasswordModal,
+    PageHeader,
   },
   setup() {
     const router = useRouter();
@@ -413,43 +417,6 @@ export default {
   background: #f5f5f5;
 }
 
-.header {
-  background: white;
-  padding: 20px 30px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.header h1 {
-  margin: 0;
-  color: #333;
-}
-
-.header-actions {
-  display: flex;
-  gap: 15px;
-  align-items: center;
-}
-
-.btn-secondary {
-  background: white;
-  color: #667eea;
-  border: 2px solid #667eea;
-  padding: 8px 16px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  transition: all 0.2s;
-}
-
-.btn-secondary:hover {
-  background: #667eea;
-  color: white;
-}
-
 .container {
   max-width: 1400px;
   margin: 0 auto;
@@ -555,33 +522,37 @@ export default {
 }
 
 .logo-preview {
-  position: relative;
-  display: inline-block;
-  margin-bottom: 1rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 1.5rem;
 }
 
 .logo-preview img {
-  max-width: 300px;
+  max-width: 100%;
   max-height: 200px;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  object-fit: contain;
+}
+
+.logo-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 1rem;
+  flex-wrap: wrap;
 }
 
 .btn-remove-logo {
-  position: absolute;
-  top: -10px;
-  right: -10px;
   background: #ff4444;
   color: white;
   border: none;
-  border-radius: 50%;
-  width: 30px;
-  height: 30px;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  font-size: 1rem;
+  transition: background 0.3s;
 }
 
 .btn-remove-logo:hover {
@@ -602,7 +573,6 @@ export default {
   border-radius: 8px;
   cursor: pointer;
   font-size: 1rem;
-  margin-top: 1rem;
   transition: background 0.3s;
 }
 

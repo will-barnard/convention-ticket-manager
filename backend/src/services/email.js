@@ -47,13 +47,13 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
   };
   
   const subtypeLabels = {
-    vip: 'VIP (3-Day Pass)',
-    adult_2day: 'Adult 2-Day Pass',
-    adult_saturday: 'Adult Saturday Pass',
-    adult_sunday: 'Adult Sunday Pass',
-    child_2day: 'Child 2-Day Pass',
-    child_saturday: 'Child Saturday Pass',
-    child_sunday: 'Child Sunday Pass'
+    vip: 'VIP Pass (Friday, Saturday, Sunday)',
+    adult_2day: 'Adult 2-Day Pass (Saturday, Sunday)',
+    adult_saturday: 'Adult 1-Day Pass (Saturday Only)',
+    adult_sunday: 'Adult 1-Day Pass (Sunday Only)',
+    child_2day: 'Child 2-Day Pass (Saturday, Sunday)',
+    child_saturday: 'Child 1-Day Pass (Saturday Only)',
+    child_sunday: 'Child 1-Day Pass (Sunday Only)'
   };
 
   let ticketLabel = ticketTypeLabels[ticketType] || 'Convention Ticket';

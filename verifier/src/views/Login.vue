@@ -166,12 +166,19 @@ export default {
 
 .convention-logo-container {
   margin-bottom: 20px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .convention-logo {
-  max-width: 200px;
-  max-height: 100px;
+  max-width: 100%;
+  max-height: 120px;
+  width: auto;
+  height: auto;
   object-fit: contain;
+  display: block;
 }
 
 .logo h1 {
