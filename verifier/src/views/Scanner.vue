@@ -71,6 +71,15 @@
               </div>
             </div>
           </div>
+          
+          <!-- Error popup for already used / wrong day -->
+          <div v-if="showErrorPopup" class="error-popup" :class="errorPopupType">
+            <div class="error-popup-content">
+              <div class="error-popup-icon">{{ errorPopupIcon }}</div>
+              <p class="error-popup-message">{{ errorPopupMessage }}</p>
+            </div>
+          </div>
+          
           <p class="camera-hint">Position QR code within the frame</p>
           <button @click="stopCamera" class="btn-stop">Close Camera</button>
         </div>
@@ -105,6 +114,11 @@ export default {
     const resultIcon = ref('');
     const resultTitle = ref('');
     const resultMessage = ref('');
+    
+    const showErrorPopup = ref(false);
+    const errorPopupMessage = ref('');
+    const errorPopupIcon = ref('');
+    const errorPopupType = ref('');
 
     const startCamera = async () => {
       try {
@@ -283,16 +297,19 @@ export default {
           resultIcon.value = '⚠';
           resultTitle.value = 'Already Used';
           resultMessage.value = 'This ticket has already been scanned';
+          showErrorPopupNotification('⚠️', 'Already Used Today', 'warning');
         } else if (result.status === 'already_scanned_today') {
           resultClass.value = 'warning';
           resultIcon.value = '⚠';
           resultTitle.value = 'Already Scanned Today';
           resultMessage.value = result.message || 'This ticket has already been scanned today';
+          showErrorPopupNotification('⚠️', result.message || 'Already Scanned Today', 'warning');
         } else if (result.status === 'wrong_date') {
           resultClass.value = 'error';
           resultIcon.value = '✕';
           resultTitle.value = 'Wrong Date';
           resultMessage.value = result.message || 'This ticket is not valid today';
+          showErrorPopupNotification('✕', result.message || 'Wrong Date - Not Valid Today', 'error');
         } else {
           resultClass.value = 'error';
           resultIcon.value = '✕';
@@ -304,6 +321,18 @@ export default {
         // Just resume scanning silently on error
         scanQRCode();
       }
+    };
+
+    const showErrorPopupNotification = (icon, message, type) => {
+      errorPopupIcon.value = icon;
+      errorPopupMessage.value = message;
+      errorPopupType.value = type;
+      showErrorPopup.value = true;
+      
+      // Auto-hide after 3 seconds
+      setTimeout(() => {
+        showErrorPopup.value = false;
+      }, 3000);
     };
 
     const resetScanner = () => {
@@ -382,6 +411,10 @@ export default {
       resultTitle,
       resultMessage,
       scanFlash,
+      showErrorPopup,
+      errorPopupMessage,
+      errorPopupIcon,
+      errorPopupType,
       startCamera,
       stopCamera,
       resetScanner,
@@ -480,13 +513,16 @@ export default {
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  padding: 20px;
+  padding: 10px;
 }
 
 .camera-modal-content {
   width: 100%;
-  max-width: 600px;
+  max-width: 500px;
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  max-height: 100vh;
 }
 
 .camera-view {
@@ -496,11 +532,12 @@ export default {
 .camera-container {
   position: relative;
   background: black;
-  border-radius: 15px;
+  border-radius: 12px;
   overflow: hidden;
-  margin-bottom: 15px;
+  margin-bottom: 12px;
   border: 5px solid transparent;
   transition: border-color 0.3s ease;
+  max-height: 60vh;
 }
 
 .camera-container.scan-success {
@@ -522,9 +559,10 @@ export default {
 video {
   width: 100%;
   height: auto;
-  min-height: 300px;
+  max-height: 60vh;
   display: block;
   background: #000;
+  object-fit: cover;
 }
 
 .scanner-overlay {
@@ -539,8 +577,8 @@ video {
 }
 
 .scanner-box {
-  width: 250px;
-  height: 250px;
+  width: 200px;
+  height: 200px;
   border: 3px solid #4CAF50;
   border-radius: 10px;
   box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
@@ -548,18 +586,18 @@ video {
 
 .camera-hint {
   color: #fff;
-  margin-bottom: 15px;
-  font-size: 14px;
+  margin-bottom: 10px;
+  font-size: 13px;
 }
 
 .btn-stop {
-  padding: 12px 30px;
+  padding: 10px 24px;
   background: #f44336;
   color: white;
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 15px;
   transition: background 0.2s;
 }
 
@@ -585,12 +623,12 @@ video {
 .result-card {
   background: white;
   border-radius: 15px;
-  padding: 30px;
+  padding: 24px;
   text-align: center;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  max-width: 500px;
+  max-width: 450px;
   width: 100%;
-  max-height: 90vh;
+  max-height: 80vh;
   overflow-y: auto;
 }
 
@@ -765,5 +803,65 @@ video {
   border-radius: 8px;
   cursor: pointer;
   font-size: 16px;
+}
+
+.error-popup {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2000;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.error-popup-content {
+  background: white;
+  padding: 20px 30px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  min-width: 280px;
+  max-width: 90vw;
+}
+
+.error-popup.warning .error-popup-content {
+  border-left: 5px solid #FF9800;
+}
+
+.error-popup.error .error-popup-content {
+  border-left: 5px solid #f44336;
+}
+
+.error-popup-icon {
+  font-size: 32px;
+  line-height: 1;
+}
+
+.error-popup.warning .error-popup-icon {
+  color: #FF9800;
+}
+
+.error-popup.error .error-popup-icon {
+  color: #f44336;
+}
+
+.error-popup-message {
+  margin: 0;
+  color: #333;
+  font-size: 16px;
+  font-weight: 600;
 }
 </style>
