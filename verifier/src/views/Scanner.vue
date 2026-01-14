@@ -61,7 +61,7 @@
                 <h3>Supplies Provided:</h3>
                 <ul class="supplies-list">
                   <li v-for="supply in ticketData.supplies" :key="supply.id">
-                    <span class="supply-name">{{ supply.supply_name }}</span>
+                    <span class="supply-name">{{ supply.name }}</span>
                     <span class="supply-qty">x{{ supply.quantity }}</span>
                   </li>
                 </ul>
