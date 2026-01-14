@@ -7,7 +7,7 @@
     </header>
 
     <div class="container">
-      <div v-if="!cameraActive && !verificationResult" class="camera-prompt">
+      <div v-if="!cameraActive" class="camera-prompt">
         <p>Click the button below to activate your camera and scan QR codes</p>
         <button @click="startCamera" class="btn-camera">
           📷 Activate Camera
@@ -23,59 +23,61 @@
             </div>
           </div>
           <p class="camera-hint">Position QR code within the frame</p>
-          <button @click="stopCamera" class="btn-stop">Stop Camera</button>
+          <button @click="stopCamera" class="btn-stop">Close Camera</button>
+
+          <!-- Show verification result below camera -->
+          <div v-if="verificationResult" class="result-card" :class="resultClass">
+            <div class="result-icon">{{ resultIcon }}</div>
+            <h2>{{ resultTitle }}</h2>
+            
+            <div v-if="ticketData" class="ticket-details">
+              <div class="detail-row">
+                <span class="label">Name:</span>
+                <span class="value">{{ ticketData.name }}</span>
+              </div>
+              <div v-if="ticketData.ticketType" class="detail-row">
+                <span class="label">Type:</span>
+                <span class="value badge" :class="ticketData.ticketType">
+                  {{ formatTicketType(ticketData.ticketType, ticketData.ticketSubtype) }}
+                </span>
+              </div>
+              <div v-if="ticketData.day" class="detail-row">
+                <span class="label">Day:</span>
+                <span class="value">{{ formatDay(ticketData.day) }}</span>
+              </div>
+              <div v-if="ticketData.allowedDays && ticketData.allowedDays.length > 0" class="detail-row">
+                <span class="label">Allowed Days:</span>
+                <span class="value">{{ formatAllowedDays(ticketData.allowedDays) }}</span>
+              </div>
+              <div v-if="ticketData.teacherName" class="detail-row">
+                <span class="label">Teacher:</span>
+                <span class="value">{{ ticketData.teacherName }}</span>
+              </div>
+              
+              <div v-if="ticketData.supplies && ticketData.supplies.length > 0" class="supplies-section">
+                <h3>Supplies Provided:</h3>
+                <ul class="supplies-list">
+                  <li v-for="supply in ticketData.supplies" :key="supply.id">
+                    <span class="supply-name">{{ supply.supply_name }}</span>
+                    <span class="supply-qty">x{{ supply.quantity }}</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <p v-if="resultMessage" class="result-message">{{ resultMessage }}</p>
+
+            <button @click="resetScanner" class="btn-reset">
+              Scan Another Ticket
+            </button>
+          </div>
+
+          <!-- Show error below camera -->
+          <div v-if="error" class="error-card">
+            <p>{{ error }}</p>
+            <button @click="clearError" class="btn-retry">Try Again</button>
+          </div>
         </div>
-      </div>
-
-      <div v-if="verificationResult" class="result-card" :class="resultClass">
-        <div class="result-icon">{{ resultIcon }}</div>
-        <h2>{{ resultTitle }}</h2>
-        
-        <div v-if="ticketData" class="ticket-details">
-          <div class="detail-row">
-            <span class="label">Name:</span>
-            <span class="value">{{ ticketData.name }}</span>
-          </div>
-          <div v-if="ticketData.ticketType" class="detail-row">
-            <span class="label">Type:</span>
-            <span class="value badge" :class="ticketData.ticketType">
-              {{ formatTicketType(ticketData.ticketType, ticketData.ticketSubtype) }}
-            </span>
-          </div>
-          <div v-if="ticketData.day" class="detail-row">
-            <span class="label">Day:</span>
-            <span class="value">{{ formatDay(ticketData.day) }}</span>
-          </div>
-          <div v-if="ticketData.allowedDays && ticketData.allowedDays.length > 0" class="detail-row">
-            <span class="label">Allowed Days:</span>
-            <span class="value">{{ formatAllowedDays(ticketData.allowedDays) }}</span>
-          </div>
-          <div v-if="ticketData.teacherName" class="detail-row">
-            <span class="label">Teacher:</span>
-            <span class="value">{{ ticketData.teacherName }}</span>
-          </div>
-          
-          <div v-if="ticketData.supplies && ticketData.supplies.length > 0" class="supplies-section">
-            <h3>Supplies Provided:</h3>
-            <ul class="supplies-list">
-              <li v-for="supply in ticketData.supplies" :key="supply.id">
-                <span class="supply-name">{{ supply.supply_name }}</span>
-                <span class="supply-qty">x{{ supply.quantity }}</span>
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        <p v-if="resultMessage" class="result-message">{{ resultMessage }}</p>
-
-        <button @click="resetScanner" class="btn-reset">
-          Scan Another Ticket
-        </button>
-      </div>
-
-      <div v-if="error" class="error-card">
-        <p>{{ error }}</p>
-        <button @click="resetScanner" class="btn-retry">Try Again</button>
       </div>
     </div>
   </div>
@@ -247,7 +249,10 @@ export default {
         scanFlash.value = false;
       }, 500);
 
-      stopCamera();
+      // Pause scanning while verifying (but keep camera running)
+      if (animationFrame.value) {
+        cancelAnimationFrame(animationFrame.value);
+      }
       
       // Extract UUID from QR code data
       // Assuming QR code contains URL like: http://domain/verify/UUID
@@ -255,6 +260,11 @@ export default {
       
       if (!uuidMatch) {
         error.value = 'Invalid QR code format';
+        // Resume scanning after error
+        setTimeout(() => {
+          error.value = '';
+          scanQRCode();
+        }, 2000);
         return;
       }
 
@@ -311,6 +321,19 @@ export default {
       resultTitle.value = '';
       resultMessage.value = '';
       scanFlash.value = false;
+      
+      // Resume scanning
+      if (cameraActive.value) {
+        scanQRCode();
+      }
+    };
+
+    const clearError = () => {
+      error.value = '';
+      // Resume scanning after clearing error
+      if (cameraActive.value) {
+        scanQRCode();
+      }
     };
 
     const formatTicketType = (type, subtype) => {
@@ -377,6 +400,7 @@ export default {
       startCamera,
       stopCamera,
       resetScanner,
+      clearError,
       formatTicketType,
       formatDay,
       formatAllowedDays,
@@ -473,12 +497,14 @@ export default {
   justify-content: center;
   z-index: 1000;
   padding: 20px;
+  overflow-y: auto;
 }
 
 .camera-modal-content {
   width: 100%;
   max-width: 600px;
   text-align: center;
+  padding-bottom: 20px;
 }
 
 .camera-view {
@@ -562,9 +588,10 @@ video {
 .result-card {
   background: white;
   border-radius: 15px;
-  padding: 40px;
+  padding: 30px;
   text-align: center;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  margin-top: 20px;
 }
 
 .result-card.success {
@@ -580,14 +607,14 @@ video {
 }
 
 .result-icon {
-  width: 80px;
-  height: 80px;
+  width: 60px;
+  height: 60px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 40px;
-  margin: 0 auto 20px;
+  font-size: 30px;
+  margin: 0 auto 15px;
   color: white;
   font-weight: bold;
 }
@@ -607,12 +634,13 @@ video {
 .result-card h2 {
   margin: 0 0 10px 0;
   color: #333;
-  font-size: 24px;
+  font-size: 20px;
 }
 
 .result-message {
   color: #666;
-  margin: 10px 0 30px 0;
+  margin: 10px 0 20px 0;
+  font-size: 14px;
 }
 
 .ticket-details {
@@ -716,16 +744,17 @@ video {
 .error-card {
   background: white;
   border-radius: 15px;
-  padding: 40px;
+  padding: 30px;
   text-align: center;
   border-top: 5px solid #f44336;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  margin-top: 20px;
 }
 
 .error-card p {
   color: #f44336;
-  margin-bottom: 20px;
-  font-size: 16px;
+  margin-bottom: 15px;
+  font-size: 14px;
 }
 
 .btn-retry {
