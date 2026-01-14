@@ -286,17 +286,6 @@ export default {
 
         console.log('Verification result:', result);
 
-        // Show popup for errors before setting result
-        if (result.status === 'already_used' || result.status === 'already_scanned_today') {
-          console.log('Showing already scanned popup');
-          showErrorPopupNotification('⚠️', result.message || 'Already Scanned Today', 'warning');
-          return;
-        } else if (result.status === 'wrong_date') {
-          console.log('Showing wrong date popup');
-          showErrorPopupNotification('✕', result.message || 'Wrong Date - Not Valid Today', 'error');
-          return;
-        }
-
         verificationResult.value = result.status;
         ticketData.value = result;
 
@@ -313,7 +302,28 @@ export default {
         }
       } catch (err) {
         console.error('Verification error:', err);
-        // Show error popup
+        
+        // Check if error response has data (backend returns 400/404 with error details)
+        if (err.response && err.response.data) {
+          const result = err.response.data;
+          console.log('Error response data:', result);
+          
+          // Show popup for errors
+          if (result.status === 'already_used' || result.status === 'already_scanned_today') {
+            console.log('Showing already scanned popup');
+            showErrorPopupNotification('⚠️', result.message || 'Already Scanned Today', 'warning');
+            return;
+          } else if (result.status === 'wrong_date') {
+            console.log('Showing wrong date popup');
+            showErrorPopupNotification('✕', result.message || 'Wrong Date - Not Valid Today', 'error');
+            return;
+          } else if (result.status === 'invalid') {
+            showErrorPopupNotification('✕', result.message || 'Invalid Ticket', 'error');
+            return;
+          }
+        }
+        
+        // Generic error
         showErrorPopupNotification('✕', 'Failed to Verify Ticket', 'error');
       }
     };
