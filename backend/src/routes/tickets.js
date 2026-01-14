@@ -64,7 +64,10 @@ router.get('/', authMiddleware, async (req, res) => {
       };
     });
     
-    res.json(tickets);
+    // Calculate total check-ins (total scans across all tickets)
+    const totalCheckIns = scansResult.rows.length;
+    
+    res.json({ tickets, totalCheckIns });
   } catch (error) {
     console.error('Error fetching tickets:', error);
     res.status(500).json({ error: 'Server error' });

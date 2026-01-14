@@ -78,8 +78,8 @@
               <font-awesome-icon icon="check" />
             </div>
             <div class="stat-content">
-              <div class="stat-value">{{ usedTickets }}</div>
-              <div class="stat-label">Used Tickets</div>
+              <div class="stat-value">{{ totalCheckIns }}</div>
+              <div class="stat-label">Total Check-ins</div>
             </div>
           </div>
           
@@ -130,8 +130,7 @@ export default {
     const router = useRouter();
     const authStore = useAuthStore();
 
-    const tickets = ref([]);
-    const loading = ref(true);
+    const tickets = ref([]);    const totalCheckIns = ref(0);    const loading = ref(true);
     const error = ref('');
     const isChangePasswordOpen = ref(false);
     const settings = ref({
@@ -154,14 +153,6 @@ export default {
       tickets.value.filter(t => t.ticket_type === 'attendee').length
     );
 
-    const usedTickets = computed(() => 
-      tickets.value.filter(t => t.is_used).length
-    );
-
-    const unusedTickets = computed(() => 
-      tickets.value.filter(t => !t.is_used).length
-    );
-
     const availableTickets = computed(() => {
       if (settings.value.enable_ticket_cap && settings.value.ticket_cap > 0) {
         return settings.value.ticket_cap - tickets.value.length;
@@ -181,7 +172,8 @@ export default {
       
       try {
         const response = await axios.get('/api/tickets');
-        tickets.value = response.data;
+        tickets.value = response.data.tickets || response.data;
+        totalCheckIns.value = response.data.totalCheckIns || 0;
       } catch (err) {
         console.error('Error loading tickets:', err);
         error.value = 'Failed to load tickets. Please try again.';
@@ -230,14 +222,13 @@ export default {
     return {
       authStore,
       tickets,
+      totalCheckIns,
       loading,
       error,
       isChangePasswordOpen,
       studentTickets,
       exhibitorTickets,
       attendeeTickets,
-      usedTickets,
-      unusedTickets,
       availableTickets,
       datesConfigured,
       settings,

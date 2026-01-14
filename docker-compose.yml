@@ -40,8 +40,7 @@ services:
       db:
         condition: service_healthy
     volumes:
-      - ./backend:/app
-      - /app/node_modules
+      - backend_uploads:/app/uploads
     command: sh -c "npm run migrate && npm run seed && npm start"
 
   frontend:
@@ -66,3 +65,4 @@ services:
 
 volumes:
   postgres_data:
+  backend_uploads:

@@ -165,7 +165,7 @@ export default {
       
       try {
         const response = await axios.get('/api/tickets');
-        tickets.value = response.data;
+        tickets.value = response.data.tickets || response.data;
       } catch (err) {
         console.error('Error loading tickets:', err);
         error.value = 'Failed to load tickets. Please try again.';
