@@ -284,6 +284,23 @@ export default {
         const response = await axios.get(`/api/verify/${uuid}`);
         const result = response.data;
 
+        // Show popup for errors before setting result
+        if (result.status === 'already_used' || result.status === 'already_scanned_today') {
+          showErrorPopupNotification('⚠️', result.message || 'Already Scanned Today', 'warning');
+          // Resume scanning after showing popup
+          setTimeout(() => {
+            scanQRCode();
+          }, 3000);
+          return;
+        } else if (result.status === 'wrong_date') {
+          showErrorPopupNotification('✕', result.message || 'Wrong Date - Not Valid Today', 'error');
+          // Resume scanning after showing popup
+          setTimeout(() => {
+            scanQRCode();
+          }, 3000);
+          return;
+        }
+
         verificationResult.value = result.status;
         ticketData.value = result;
 
@@ -292,24 +309,6 @@ export default {
           resultIcon.value = '✓';
           resultTitle.value = 'Access Granted!';
           resultMessage.value = 'Ticket verified successfully';
-        } else if (result.status === 'already_used') {
-          resultClass.value = 'warning';
-          resultIcon.value = '⚠';
-          resultTitle.value = 'Already Used';
-          resultMessage.value = 'This ticket has already been scanned';
-          showErrorPopupNotification('⚠️', 'Already Used Today', 'warning');
-        } else if (result.status === 'already_scanned_today') {
-          resultClass.value = 'warning';
-          resultIcon.value = '⚠';
-          resultTitle.value = 'Already Scanned Today';
-          resultMessage.value = result.message || 'This ticket has already been scanned today';
-          showErrorPopupNotification('⚠️', result.message || 'Already Scanned Today', 'warning');
-        } else if (result.status === 'wrong_date') {
-          resultClass.value = 'error';
-          resultIcon.value = '✕';
-          resultTitle.value = 'Wrong Date';
-          resultMessage.value = result.message || 'This ticket is not valid today';
-          showErrorPopupNotification('✕', result.message || 'Wrong Date - Not Valid Today', 'error');
         } else {
           resultClass.value = 'error';
           resultIcon.value = '✕';
@@ -616,19 +615,18 @@ video {
   align-items: center;
   justify-content: center;
   z-index: 10;
-  padding: 20px;
-  overflow-y: auto;
+  padding: 15px;
 }
 
 .result-card {
   background: white;
   border-radius: 15px;
-  padding: 24px;
+  padding: 20px;
   text-align: center;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  max-width: 450px;
+  max-width: 90%;
   width: 100%;
-  max-height: 80vh;
+  max-height: calc(100% - 30px);
   overflow-y: auto;
 }
 
