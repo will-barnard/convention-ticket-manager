@@ -133,9 +133,16 @@ export default {
         stream.value = await navigator.mediaDevices.getUserMedia(constraints);
         console.log('Camera stream obtained:', stream.value);
         
+        // Set camera active first so the video element gets rendered
+        cameraActive.value = true;
+        
+        // Wait for next tick to ensure video element is in DOM
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        console.log('Video element ref:', videoElement.value);
+        
         if (videoElement.value) {
           videoElement.value.srcObject = stream.value;
-          cameraActive.value = true;
           console.log('Camera activated, video element set');
           
           // Wait for video to be ready before scanning
@@ -144,6 +151,9 @@ export default {
             videoElement.value.play();
             scanQRCode();
           };
+        } else {
+          console.error('Video element not found in DOM!');
+          error.value = 'Unable to initialize video element. Please try again.';
         }
       } catch (err) {
         console.error('Camera error:', err);
