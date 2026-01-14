@@ -1,0 +1,174 @@
+const nodemailer = require('nodemailer');
+const db = require('../config/database');
+
+// Check if email is configured
+const isEmailConfigured = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS;
+
+// Create transporter only if email is configured
+let transporter = null;
+if (isEmailConfigured) {
+  transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: process.env.SMTP_PORT,
+    secure: false, // true for 465, false for other ports
+    requireTLS: true, // Enable STARTTLS
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+    tls: {
+      rejectUnauthorized: false
+    }
+  });
+}
+
+// Send ticket email with QR code
+async function sendTicketEmail({ to, name, ticketType, teacherName, supplies, qrCodeDataUrl, verifyUrl }) {
+  // Skip email if not configured
+  if (!isEmailConfigured || !transporter) {
+    console.log('⚠️  Email not configured - skipping email send');
+    console.log(`   Ticket would have been sent to: ${to}`);
+    return { success: false, message: 'Email not configured' };
+  }
+
+  // Debug: Log email configuration
+  console.log('📧 Email Configuration:');
+  console.log('   SMTP_HOST:', process.env.SMTP_HOST);
+  console.log('   SMTP_PORT:', process.env.SMTP_PORT);
+  console.log('   SMTP_USER:', process.env.SMTP_USER);
+  console.log('   SMTP_PASS:', process.env.SMTP_PASS ? `${process.env.SMTP_PASS.substring(0, 4)}****` : 'NOT SET');
+  console.log('   EMAIL_FROM:', process.env.EMAIL_FROM);
+  console.log('   Sending to:', to);
+  const ticketTypeLabels = {
+    student: 'Student Ticket',
+    exhibitor: 'Exhibitor Ticket',
+    day_pass: 'Day Pass'
+  };
+
+  const ticketLabel = ticketTypeLabels[ticketType] || 'Convention Ticket';
+  
+  // Fetch convention name from settings
+  let conventionName = 'Convention';
+  try {
+    const settingsResult = await db.query('SELECT convention_name FROM settings LIMIT 1');
+    if (settingsResult.rows.length > 0) {
+      conventionName = settingsResult.rows[0].convention_name;
+    }
+  } catch (error) {
+    console.log('Note: Could not fetch convention name from settings, using default');
+  }
+  
+  // Build supplies list HTML
+  let suppliesHtml = '';
+  if (ticketType === 'exhibitor' && supplies && supplies.length > 0) {
+    suppliesHtml = `
+      <div style="background: #e8f5e9; padding: 15px; border-radius: 5px; margin: 20px 0;">
+        <h3 style="margin-top: 0; color: #2e7d32;">Supplies Provided:</h3>
+        <ul style="margin: 10px 0;">
+          ${supplies.map(s => `<li>${s.name} (Quantity: ${s.quantity})</li>`).join('')}
+        </ul>
+      </div>
+    `;
+  }
+
+  // Build ticket details HTML
+  let detailsHtml = `<p><strong>Name:</strong> ${name}</p>`;
+  if (ticketType === 'student' && teacherName) {
+    detailsHtml += `<p><strong>Teacher:</strong> ${teacherName}</p>`;
+  }
+  detailsHtml += `<p><strong>Type:</strong> ${ticketLabel}</p>`;
+
+  const mailOptions = {
+    from: process.env.EMAIL_FROM,
+    to: to,
+    subject: `Your ${ticketLabel}`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+          }
+          .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+          }
+          .header {
+            background-color: #4CAF50;
+            color: white;
+            padding: 20px;
+            text-align: center;
+          }
+          .content {
+            padding: 20px;
+            background-color: #f9f9f9;
+          }
+          .qr-code {
+            text-align: center;
+            margin: 30px 0;
+          }
+          .qr-code img {
+            max-width: 300px;
+            border: 2px solid #ddd;
+            padding: 10px;
+            background: white;
+          }
+          .footer {
+            text-align: center;
+            padding: 20px;
+            font-size: 12px;
+            color: #666;
+          }
+          .button {
+            display: inline-block;
+            padding: 12px 30px;
+            background-color: #4CAF50;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 20px 0;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>${ticketLabel}</h1>
+          </div>
+          <div class="content">
+            <h2>Hello ${name}!</h2>
+            <p>Your ${conventionName} ticket has been issued.</p>
+            ${detailsHtml}
+            ${suppliesHtml}
+            
+            <div class="qr-code">
+              <p><strong>Your Ticket QR Code:</strong></p>
+              <img src="${qrCodeDataUrl}" alt="Ticket QR Code" />
+              <p>Scan this QR code at the convention entrance</p>
+            </div>
+            
+            <p style="text-align: center;">
+              <a href="${verifyUrl}" class="button">View Ticket Online</a>
+            </p>
+            
+            <p><strong>Important:</strong> This ticket can only be used once. Please keep it safe and present it at the convention entrance.</p>
+          </div>
+          <div class="footer">
+            <p>This is an automated email. Please do not reply.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+  };
+
+  return transporter.sendMail(mailOptions);
+}
+
+module.exports = {
+  sendTicketEmail,
+};
