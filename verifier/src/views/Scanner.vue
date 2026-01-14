@@ -21,56 +21,58 @@
             <div class="scanner-overlay">
               <div class="scanner-box"></div>
             </div>
+            
+            <!-- Show verification result overlay on top of camera -->
+            <div v-if="verificationResult" class="result-overlay">
+              <div class="result-card" :class="resultClass">
+                <div class="result-icon">{{ resultIcon }}</div>
+                <h2>{{ resultTitle }}</h2>
+                
+                <div v-if="ticketData" class="ticket-details">
+                  <div class="detail-row">
+                    <span class="label">Name:</span>
+                    <span class="value">{{ ticketData.name }}</span>
+                  </div>
+                  <div v-if="ticketData.ticketType" class="detail-row">
+                    <span class="label">Type:</span>
+                    <span class="value badge" :class="ticketData.ticketType">
+                      {{ formatTicketType(ticketData.ticketType, ticketData.ticketSubtype) }}
+                    </span>
+                  </div>
+                  <div v-if="ticketData.day" class="detail-row">
+                    <span class="label">Day:</span>
+                    <span class="value">{{ formatDay(ticketData.day) }}</span>
+                  </div>
+                  <div v-if="ticketData.allowedDays && ticketData.allowedDays.length > 0" class="detail-row">
+                    <span class="label">Allowed Days:</span>
+                    <span class="value">{{ formatAllowedDays(ticketData.allowedDays) }}</span>
+                  </div>
+                  <div v-if="ticketData.teacherName" class="detail-row">
+                    <span class="label">Teacher:</span>
+                    <span class="value">{{ ticketData.teacherName }}</span>
+                  </div>
+                  
+                  <div v-if="ticketData.supplies && ticketData.supplies.length > 0" class="supplies-section">
+                    <h3>Supplies Provided:</h3>
+                    <ul class="supplies-list">
+                      <li v-for="supply in ticketData.supplies" :key="supply.id">
+                        <span class="supply-name">{{ supply.supply_name }}</span>
+                        <span class="supply-qty">x{{ supply.quantity }}</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+
+                <p v-if="resultMessage" class="result-message">{{ resultMessage }}</p>
+
+                <button @click="resetScanner" class="btn-reset">
+                  Scan Another Ticket
+                </button>
+              </div>
+            </div>
           </div>
           <p class="camera-hint">Position QR code within the frame</p>
           <button @click="stopCamera" class="btn-stop">Close Camera</button>
-
-          <!-- Show verification result below camera -->
-          <div v-if="verificationResult" class="result-card" :class="resultClass">
-            <div class="result-icon">{{ resultIcon }}</div>
-            <h2>{{ resultTitle }}</h2>
-            
-            <div v-if="ticketData" class="ticket-details">
-              <div class="detail-row">
-                <span class="label">Name:</span>
-                <span class="value">{{ ticketData.name }}</span>
-              </div>
-              <div v-if="ticketData.ticketType" class="detail-row">
-                <span class="label">Type:</span>
-                <span class="value badge" :class="ticketData.ticketType">
-                  {{ formatTicketType(ticketData.ticketType, ticketData.ticketSubtype) }}
-                </span>
-              </div>
-              <div v-if="ticketData.day" class="detail-row">
-                <span class="label">Day:</span>
-                <span class="value">{{ formatDay(ticketData.day) }}</span>
-              </div>
-              <div v-if="ticketData.allowedDays && ticketData.allowedDays.length > 0" class="detail-row">
-                <span class="label">Allowed Days:</span>
-                <span class="value">{{ formatAllowedDays(ticketData.allowedDays) }}</span>
-              </div>
-              <div v-if="ticketData.teacherName" class="detail-row">
-                <span class="label">Teacher:</span>
-                <span class="value">{{ ticketData.teacherName }}</span>
-              </div>
-              
-              <div v-if="ticketData.supplies && ticketData.supplies.length > 0" class="supplies-section">
-                <h3>Supplies Provided:</h3>
-                <ul class="supplies-list">
-                  <li v-for="supply in ticketData.supplies" :key="supply.id">
-                    <span class="supply-name">{{ supply.supply_name }}</span>
-                    <span class="supply-qty">x{{ supply.quantity }}</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-
-            <p v-if="resultMessage" class="result-message">{{ resultMessage }}</p>
-
-            <button @click="resetScanner" class="btn-reset">
-              Scan Another Ticket
-            </button>
-          </div>
         </div>
       </div>
     </div>
@@ -479,14 +481,12 @@ export default {
   justify-content: center;
   z-index: 1000;
   padding: 20px;
-  overflow-y: auto;
 }
 
 .camera-modal-content {
   width: 100%;
   max-width: 600px;
   text-align: center;
-  padding-bottom: 20px;
 }
 
 .camera-view {
@@ -567,13 +567,31 @@ video {
   background: #d32f2f;
 }
 
+.result-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  padding: 20px;
+  overflow-y: auto;
+}
+
 .result-card {
   background: white;
   border-radius: 15px;
   padding: 30px;
   text-align: center;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  margin-top: 20px;
+  max-width: 500px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
 .result-card.success {
