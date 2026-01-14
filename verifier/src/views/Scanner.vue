@@ -288,6 +288,9 @@ export default {
 
         verificationResult.value = result.status;
         ticketData.value = result;
+        
+        console.log('Ticket data:', ticketData.value);
+        console.log('Supplies:', ticketData.value.supplies);
 
         if (result.status === 'valid') {
           resultClass.value = 'success';
