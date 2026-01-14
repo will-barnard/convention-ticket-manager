@@ -482,6 +482,8 @@ export default {
   padding: 20px;
   max-width: 600px;
   margin: 0 auto;
+  position: relative;
+  min-height: calc(100vh - 80px);
 }
 
 .camera-prompt {
@@ -490,6 +492,13 @@ export default {
   background: white;
   border-radius: 15px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  max-width: 500px;
+  margin: 0 auto;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 90%;
 }
 
 .camera-prompt p {
