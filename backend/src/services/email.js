@@ -23,7 +23,7 @@ if (isEmailConfigured) {
 }
 
 // Send ticket email with QR code
-async function sendTicketEmail({ to, name, ticketType, teacherName, supplies, qrCodeDataUrl, verifyUrl }) {
+async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherName, supplies, qrCodeDataUrl, verifyUrl }) {
   // Skip email if not configured
   if (!isEmailConfigured || !transporter) {
     console.log('⚠️  Email not configured - skipping email send');
@@ -39,13 +39,27 @@ async function sendTicketEmail({ to, name, ticketType, teacherName, supplies, qr
   console.log('   SMTP_PASS:', process.env.SMTP_PASS ? `${process.env.SMTP_PASS.substring(0, 4)}****` : 'NOT SET');
   console.log('   EMAIL_FROM:', process.env.EMAIL_FROM);
   console.log('   Sending to:', to);
+  
   const ticketTypeLabels = {
     student: 'Student Ticket',
     exhibitor: 'Exhibitor Ticket',
-    day_pass: 'Day Pass'
+    attendee: 'Attendee Ticket'
+  };
+  
+  const subtypeLabels = {
+    vip: 'VIP (3-Day Pass)',
+    adult_2day: 'Adult 2-Day Pass',
+    adult_saturday: 'Adult Saturday Pass',
+    adult_sunday: 'Adult Sunday Pass',
+    child_2day: 'Child 2-Day Pass',
+    child_saturday: 'Child Saturday Pass',
+    child_sunday: 'Child Sunday Pass'
   };
 
-  const ticketLabel = ticketTypeLabels[ticketType] || 'Convention Ticket';
+  let ticketLabel = ticketTypeLabels[ticketType] || 'Convention Ticket';
+  if (ticketType === 'attendee' && ticketSubtype) {
+    ticketLabel = subtypeLabels[ticketSubtype] || ticketLabel;
+  }
   
   // Fetch convention name from settings
   let conventionName = 'Convention';

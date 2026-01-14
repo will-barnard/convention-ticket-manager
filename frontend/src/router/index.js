@@ -5,6 +5,7 @@ import Home from '@/views/Home.vue';
 import Tickets from '@/views/Tickets.vue';
 import AddTicket from '@/views/AddTicket.vue';
 import VerifyTicket from '@/views/VerifyTicket.vue';
+import Usage from '@/views/Usage.vue';
 import Settings from '@/views/Settings.vue';
 
 const routes = [
@@ -29,6 +30,12 @@ const routes = [
     path: '/add-ticket',
     name: 'AddTicket',
     component: AddTicket,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/usage',
+    name: 'Usage',
+    component: Usage,
     meta: { requiresAuth: true },
   },
   {

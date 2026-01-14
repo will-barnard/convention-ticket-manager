@@ -3,6 +3,54 @@ const db = require('../config/database');
 
 const router = express.Router();
 
+// Helper function to get allowed days for an attendee ticket subtype
+function getAllowedDays(subtype) {
+  const dayMapping = {
+    'vip': ['friday', 'saturday', 'sunday'],
+    'adult_2day': ['saturday', 'sunday'],
+    'adult_saturday': ['saturday'],
+    'adult_sunday': ['sunday'],
+    'child_2day': ['saturday', 'sunday'],
+    'child_saturday': ['saturday'],
+    'child_sunday': ['sunday']
+  };
+  return dayMapping[subtype] || [];
+}
+
+// Helper function to check if today matches any of the allowed convention dates
+async function checkDateValidity(allowedDays) {
+  const settingsResult = await db.query('SELECT friday_date, saturday_date, sunday_date FROM settings LIMIT 1');
+  
+  if (settingsResult.rows.length === 0) {
+    return { valid: false, message: 'Convention dates not configured in settings' };
+  }
+  
+  const settings = settingsResult.rows[0];
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+  
+  const dateMapping = {
+    'friday': settings.friday_date,
+    'saturday': settings.saturday_date,
+    'sunday': settings.sunday_date
+  };
+  
+  for (const day of allowedDays) {
+    const conventionDate = dateMapping[day];
+    if (conventionDate) {
+      const dateStr = new Date(conventionDate).toISOString().split('T')[0];
+      if (dateStr === today) {
+        return { valid: true, day: day };
+      }
+    }
+  }
+  
+  return { 
+    valid: false, 
+    message: `This ticket is only valid on: ${allowedDays.join(', ')}`,
+    allowedDays: allowedDays 
+  };
+}
+
 // Verify ticket by UUID (public endpoint)
 router.get('/:uuid', async (req, res) => {
   try {
@@ -10,7 +58,7 @@ router.get('/:uuid', async (req, res) => {
 
     // Find ticket
     const ticketResult = await db.query(
-      'SELECT id, ticket_type, name, teacher_name, email, is_used FROM tickets WHERE uuid = $1',
+      'SELECT id, ticket_type, ticket_subtype, name, teacher_name, email, is_used FROM tickets WHERE uuid = $1',
       [uuid]
     );
 
@@ -23,6 +71,56 @@ router.get('/:uuid', async (req, res) => {
 
     const ticket = ticketResult.rows[0];
 
+    // For attendee tickets, check date restrictions
+    if (ticket.ticket_type === 'attendee') {
+      const allowedDays = getAllowedDays(ticket.ticket_subtype);
+      const dateCheck = await checkDateValidity(allowedDays);
+      
+      if (!dateCheck.valid) {
+        return res.status(400).json({
+          status: 'wrong_date',
+          message: dateCheck.message,
+          allowedDays: dateCheck.allowedDays,
+          ticketType: ticket.ticket_type,
+          ticketSubtype: ticket.ticket_subtype,
+          name: ticket.name,
+        });
+      }
+      
+      // Check if ticket has already been scanned today
+      const today = new Date().toISOString().split('T')[0];
+      const scanCheckResult = await db.query(
+        'SELECT id FROM ticket_scans WHERE ticket_id = $1 AND scan_date = $2',
+        [ticket.id, today]
+      );
+      
+      if (scanCheckResult.rows.length > 0) {
+        return res.status(400).json({
+          status: 'already_scanned_today',
+          message: 'This ticket has already been scanned today',
+          ticketType: ticket.ticket_type,
+          ticketSubtype: ticket.ticket_subtype,
+          name: ticket.name,
+        });
+      }
+      
+      // Record the scan
+      await db.query(
+        'INSERT INTO ticket_scans (ticket_id, scan_date) VALUES ($1, $2)',
+        [ticket.id, today]
+      );
+      
+      return res.json({
+        status: 'valid',
+        message: 'Access granted to the convention',
+        ticketType: ticket.ticket_type,
+        ticketSubtype: ticket.ticket_subtype,
+        name: ticket.name,
+        day: dateCheck.day,
+      });
+    }
+
+    // For student and exhibitor tickets, use the old logic (single-use)
     // Check if already used
     if (ticket.is_used) {
       return res.status(400).json({

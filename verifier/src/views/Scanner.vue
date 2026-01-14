@@ -37,8 +37,16 @@
           <div v-if="ticketData.ticketType" class="detail-row">
             <span class="label">Type:</span>
             <span class="value badge" :class="ticketData.ticketType">
-              {{ formatTicketType(ticketData.ticketType) }}
+              {{ formatTicketType(ticketData.ticketType, ticketData.ticketSubtype) }}
             </span>
+          </div>
+          <div v-if="ticketData.day" class="detail-row">
+            <span class="label">Day:</span>
+            <span class="value">{{ formatDay(ticketData.day) }}</span>
+          </div>
+          <div v-if="ticketData.allowedDays && ticketData.allowedDays.length > 0" class="detail-row">
+            <span class="label">Allowed Days:</span>
+            <span class="value">{{ formatAllowedDays(ticketData.allowedDays) }}</span>
           </div>
           <div v-if="ticketData.teacherName" class="detail-row">
             <span class="label">Teacher:</span>
@@ -248,11 +256,21 @@ export default {
           resultIcon.value = '⚠';
           resultTitle.value = 'Already Used';
           resultMessage.value = 'This ticket has already been scanned';
+        } else if (result.status === 'already_scanned_today') {
+          resultClass.value = 'warning';
+          resultIcon.value = '⚠';
+          resultTitle.value = 'Already Scanned Today';
+          resultMessage.value = result.message || 'This ticket has already been scanned today';
+        } else if (result.status === 'wrong_date') {
+          resultClass.value = 'error';
+          resultIcon.value = '✕';
+          resultTitle.value = 'Wrong Date';
+          resultMessage.value = result.message || 'This ticket is not valid today';
         } else {
           resultClass.value = 'error';
           resultIcon.value = '✕';
           resultTitle.value = 'Invalid Ticket';
-          resultMessage.value = 'This ticket is not valid';
+          resultMessage.value = result.message || 'This ticket is not valid';
         }
       } catch (err) {
         console.error('Verification error:', err);
@@ -270,13 +288,41 @@ export default {
       resultMessage.value = '';
     };
 
-    const formatTicketType = (type) => {
+    const formatTicketType = (type, subtype) => {
       const types = {
         student: 'Student',
         exhibitor: 'Exhibitor',
-        day_pass: 'Day Pass'
+        attendee: 'Attendee'
       };
-      return types[type] || type;
+      
+      const subtypes = {
+        vip: 'VIP',
+        adult_2day: 'Adult 2-Day',
+        adult_saturday: 'Adult Saturday',
+        adult_sunday: 'Adult Sunday',
+        child_2day: 'Child 2-Day',
+        child_saturday: 'Child Saturday',
+        child_sunday: 'Child Sunday'
+      };
+      
+      let label = types[type] || type;
+      if (type === 'attendee' && subtype) {
+        label += ` - ${subtypes[subtype] || subtype}`;
+      }
+      return label;
+    };
+
+    const formatDay = (day) => {
+      const days = {
+        friday: 'Friday',
+        saturday: 'Saturday',
+        sunday: 'Sunday'
+      };
+      return days[day] || day;
+    };
+
+    const formatAllowedDays = (days) => {
+      return days.map(d => formatDay(d)).join(', ');
     };
 
     const goBack = () => {
@@ -306,6 +352,8 @@ export default {
       stopCamera,
       resetScanner,
       formatTicketType,
+      formatDay,
+      formatAllowedDays,
       goBack,
       retryWithBasicConstraints,
     };

@@ -45,7 +45,13 @@ router.get('/', async (req, res) => {
       return res.json({
         id: 1,
         convention_name: 'My Convention',
-        logo_url: null
+        logo_url: null,
+        enable_ticket_cap: false,
+        ticket_cap: 0,
+        friday_date: null,
+        saturday_date: null,
+        sunday_date: null,
+        auto_send_emails: true
       });
     }
     res.json(result.rows[0]);
@@ -58,7 +64,7 @@ router.get('/', async (req, res) => {
 // Update settings
 router.put('/', auth, async (req, res) => {
   try {
-    const { convention_name } = req.body;
+    const { convention_name, enable_ticket_cap, ticket_cap, friday_date, saturday_date, sunday_date, auto_send_emails } = req.body;
     
     // Check if settings exist
     const checkResult = await db.query('SELECT * FROM settings LIMIT 1');
@@ -66,15 +72,15 @@ router.put('/', auth, async (req, res) => {
     if (checkResult.rows.length === 0) {
       // Insert new settings
       const result = await db.query(
-        'INSERT INTO settings (convention_name, updated_at) VALUES ($1, NOW()) RETURNING *',
-        [convention_name]
+        'INSERT INTO settings (convention_name, enable_ticket_cap, ticket_cap, friday_date, saturday_date, sunday_date, auto_send_emails, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) RETURNING *',
+        [convention_name, enable_ticket_cap || false, ticket_cap || 0, friday_date || null, saturday_date || null, sunday_date || null, auto_send_emails !== undefined ? auto_send_emails : true]
       );
       res.json(result.rows[0]);
     } else {
       // Update existing settings
       const result = await db.query(
-        'UPDATE settings SET convention_name = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
-        [convention_name, checkResult.rows[0].id]
+        'UPDATE settings SET convention_name = $1, enable_ticket_cap = $2, ticket_cap = $3, friday_date = $4, saturday_date = $5, sunday_date = $6, auto_send_emails = $7, updated_at = NOW() WHERE id = $8 RETURNING *',
+        [convention_name, enable_ticket_cap || false, ticket_cap || 0, friday_date || null, saturday_date || null, sunday_date || null, auto_send_emails !== undefined ? auto_send_emails : true, checkResult.rows[0].id]
       );
       res.json(result.rows[0]);
     }

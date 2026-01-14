@@ -10,6 +10,8 @@ async function createSettingsTable() {
         id SERIAL PRIMARY KEY,
         convention_name VARCHAR(255) NOT NULL DEFAULT 'My Convention',
         logo_url TEXT,
+        enable_ticket_cap BOOLEAN DEFAULT FALSE,
+        ticket_cap INTEGER DEFAULT 0,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);

@@ -15,8 +15,20 @@
       <nav class="nav-tabs">
         <router-link to="/" class="nav-tab" exact-active-class="active">Dashboard</router-link>
         <router-link to="/tickets" class="nav-tab" active-class="active">Tickets</router-link>
+        <router-link to="/usage" class="nav-tab" active-class="active">Usage</router-link>
         <router-link to="/settings" class="nav-tab" active-class="active">Settings</router-link>
       </nav>
+
+      <div v-if="!loading && !datesConfigured" class="warning-banner">
+        <div class="warning-content">
+          <font-awesome-icon icon="exclamation-triangle" class="warning-icon" />
+          <div class="warning-text">
+            <strong>Convention dates not configured!</strong>
+            <p>Please set your convention dates in Settings to enable ticket verification and usage tracking.</p>
+          </div>
+          <router-link to="/settings" class="btn-configure">Configure Dates</router-link>
+        </div>
+      </div>
 
       <div v-if="loading" class="loading">Loading stats...</div>
 
@@ -29,49 +41,61 @@
         
         <div class="stats-grid">
           <div class="stat-card total">
-            <div class="stat-icon">🎫</div>
+            <div class="stat-icon">
+              <font-awesome-icon icon="ticket" />
+            </div>
             <div class="stat-content">
               <div class="stat-value">{{ tickets.length }}</div>
               <div class="stat-label">Total Tickets</div>
             </div>
           </div>
-          
-          <div class="stat-card student">
-            <div class="stat-icon">🎓</div>
+
+          <div class="stat-card attendee">
+            <div class="stat-icon">
+              <font-awesome-icon icon="calendar-day" />
+            </div>
             <div class="stat-content">
-              <div class="stat-value">{{ studentTickets }}</div>
-              <div class="stat-label">Student Tickets</div>
+              <div class="stat-value">{{ attendeeTickets }}</div>
+              <div class="stat-label">Attendee Tickets</div>
             </div>
           </div>
-          
+
           <div class="stat-card exhibitor">
-            <div class="stat-icon">🏢</div>
+            <div class="stat-icon">
+              <font-awesome-icon icon="building" />
+            </div>
             <div class="stat-content">
               <div class="stat-value">{{ exhibitorTickets }}</div>
               <div class="stat-label">Exhibitor Tickets</div>
             </div>
           </div>
           
-          <div class="stat-card day-pass">
-            <div class="stat-icon">📅</div>
+          <div class="stat-card student">
+            <div class="stat-icon">
+              <font-awesome-icon icon="graduation-cap" />
+            </div>
             <div class="stat-content">
-              <div class="stat-value">{{ dayPassTickets }}</div>
-              <div class="stat-label">Day Passes</div>
+              <div class="stat-value">{{ studentTickets }}</div>
+              <div class="stat-label">Student Tickets</div>
             </div>
           </div>
           
           <div class="stat-card used">
-            <div class="stat-icon">✓</div>
+            <div class="stat-icon">
+              <font-awesome-icon icon="check" />
+            </div>
             <div class="stat-content">
               <div class="stat-value">{{ usedTickets }}</div>
               <div class="stat-label">Used Tickets</div>
             </div>
           </div>
           
-          <div class="stat-card available">
-            <div class="stat-icon">⭐</div>
+          <div v-if="settings.enable_ticket_cap" class="stat-card available">
+            <div class="stat-icon">
+              <font-awesome-icon icon="star" />
+            </div>
             <div class="stat-content">
-              <div class="stat-value">{{ unusedTickets }}</div>
+              <div class="stat-value">{{ availableTickets }}</div>
               <div class="stat-label">Available</div>
             </div>
           </div>
@@ -115,6 +139,13 @@ export default {
     const loading = ref(true);
     const error = ref('');
     const isChangePasswordOpen = ref(false);
+    const settings = ref({
+      enable_ticket_cap: false,
+      ticket_cap: 0,
+      friday_date: null,
+      saturday_date: null,
+      sunday_date: null
+    });
 
     const studentTickets = computed(() => 
       tickets.value.filter(t => t.ticket_type === 'student').length
@@ -124,8 +155,8 @@ export default {
       tickets.value.filter(t => t.ticket_type === 'exhibitor').length
     );
 
-    const dayPassTickets = computed(() => 
-      tickets.value.filter(t => t.ticket_type === 'day_pass').length
+    const attendeeTickets = computed(() => 
+      tickets.value.filter(t => t.ticket_type === 'attendee').length
     );
 
     const usedTickets = computed(() => 
@@ -135,6 +166,17 @@ export default {
     const unusedTickets = computed(() => 
       tickets.value.filter(t => !t.is_used).length
     );
+
+    const availableTickets = computed(() => {
+      if (settings.value.enable_ticket_cap && settings.value.ticket_cap > 0) {
+        return settings.value.ticket_cap - tickets.value.length;
+      }
+      return 0;
+    });
+
+    const datesConfigured = computed(() => {
+      return settings.value.friday_date || settings.value.saturday_date || settings.value.sunday_date;
+    });
 
     const loadTickets = async () => {
       loading.value = true;
@@ -148,6 +190,15 @@ export default {
         error.value = 'Failed to load tickets. Please try again.';
       } finally {
         loading.value = false;
+      }
+    };
+
+    const fetchSettings = async () => {
+      try {
+        const response = await axios.get('/api/settings');
+        settings.value = response.data;
+      } catch (error) {
+        console.log('Could not fetch settings');
       }
     };
 
@@ -171,6 +222,7 @@ export default {
     onMounted(() => {
       authStore.initAuth();
       loadTickets();
+      fetchSettings();
     });
 
     return {
@@ -181,9 +233,12 @@ export default {
       isChangePasswordOpen,
       studentTickets,
       exhibitorTickets,
-      dayPassTickets,
+      attendeeTickets,
       usedTickets,
       unusedTickets,
+      availableTickets,
+      datesConfigured,
+      settings,
       goToAddTicket,
       goToTickets,
       showChangePassword,
@@ -282,6 +337,13 @@ export default {
 
 .stat-icon {
   font-size: 48px;
+  width: 70px;
+  height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  flex-shrink: 0;
 }
 
 .stat-content {
@@ -312,7 +374,7 @@ export default {
   border-left: 4px solid #FF9800;
 }
 
-.stat-card.day-pass {
+.stat-card.attendee {
   border-left: 4px solid #2196F3;
 }
 
@@ -378,6 +440,60 @@ export default {
   padding: 15px;
   border-radius: 5px;
   text-align: center;
+}
+
+.warning-banner {
+  background: linear-gradient(135deg, #FFA726 0%, #FB8C00 100%);
+  color: white;
+  padding: 20px;
+  border-radius: 12px;
+  margin-bottom: 30px;
+  box-shadow: 0 4px 12px rgba(251, 140, 0, 0.3);
+}
+
+.warning-content {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.warning-icon {
+  font-size: 32px;
+  flex-shrink: 0;
+}
+
+.warning-text {
+  flex: 1;
+}
+
+.warning-text strong {
+  display: block;
+  font-size: 18px;
+  margin-bottom: 5px;
+}
+
+.warning-text p {
+  margin: 0;
+  font-size: 14px;
+  opacity: 0.95;
+}
+
+.btn-configure {
+  background: white;
+  color: #FB8C00;
+  padding: 10px 20px;
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: all 0.2s;
+  display: inline-block;
+}
+
+.btn-configure:hover {
+  background: #f5f5f5;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
 
 .btn-primary, .btn-secondary {

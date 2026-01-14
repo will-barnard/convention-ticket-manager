@@ -17,6 +17,7 @@ const ticketRoutes = require('./routes/tickets');
 const verifyRoutes = require('./routes/verify');
 const userRoutes = require('./routes/user');
 const settingsRoutes = require('./routes/settings');
+const usageRoutes = require('./routes/usage');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -33,6 +34,7 @@ app.use('/api/tickets', ticketRoutes);
 app.use('/api/verify', verifyRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/usage', usageRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

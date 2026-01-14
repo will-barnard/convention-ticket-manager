@@ -12,21 +12,21 @@
           @click="formData.ticketType = 'student'; onTicketTypeChange()"
           :class="['tab-btn', { active: formData.ticketType === 'student' }]"
         >
-          🎓 Student Ticket
+          <font-awesome-icon icon="graduation-cap" /> Student Ticket
         </button>
         <button
           type="button"
           @click="formData.ticketType = 'exhibitor'; onTicketTypeChange()"
           :class="['tab-btn', { active: formData.ticketType === 'exhibitor' }]"
         >
-          🏢 Exhibitor Ticket
+          <font-awesome-icon icon="building" /> Exhibitor Ticket
         </button>
         <button
           type="button"
-          @click="formData.ticketType = 'day_pass'; onTicketTypeChange()"
-          :class="['tab-btn', { active: formData.ticketType === 'day_pass' }]"
+          @click="formData.ticketType = 'attendee'; onTicketTypeChange()"
+          :class="['tab-btn', { active: formData.ticketType === 'attendee' }]"
         >
-          📅 Day Pass
+          <font-awesome-icon icon="ticket" /> Attendee Ticket
         </button>
       </div>
 
@@ -54,6 +54,24 @@
               :required="formData.ticketType === 'student'"
               placeholder="Enter teacher name"
             />
+          </div>
+
+          <div v-if="formData.ticketType === 'attendee'" class="form-group">
+            <label for="ticketSubtype">Ticket Type *</label>
+            <select
+              id="ticketSubtype"
+              v-model="formData.ticketSubtype"
+              required
+            >
+              <option value="">Select ticket type</option>
+              <option value="vip">VIP (Friday, Saturday, Sunday)</option>
+              <option value="adult_2day">Adult 2-Day Pass (Saturday, Sunday)</option>
+              <option value="adult_saturday">Adult 1-Day Pass (Saturday)</option>
+              <option value="adult_sunday">Adult 1-Day Pass (Sunday)</option>
+              <option value="child_2day">Child 2-Day Pass (Saturday, Sunday)</option>
+              <option value="child_saturday">Child 1-Day Pass (Saturday)</option>
+              <option value="child_sunday">Child 1-Day Pass (Sunday)</option>
+            </select>
           </div>
 
           <div class="form-group">
@@ -147,6 +165,7 @@ export default {
 
     const formData = reactive({
       ticketType: 'student',
+      ticketSubtype: '',
       name: '',
       teacherName: '',
       email: '',
@@ -161,7 +180,7 @@ export default {
       const titles = {
         student: 'Student Ticket',
         exhibitor: 'Exhibitor Ticket',
-        day_pass: 'Day Pass'
+        attendee: 'Attendee Ticket'
       };
       return titles[formData.ticketType] || '';
     });
@@ -172,7 +191,7 @@ export default {
           return 'Enter student name';
         case 'exhibitor':
           return 'Enter exhibitor/company name';
-        case 'day_pass':
+        case 'attendee':
           return 'Enter attendee name';
         default:
           return 'Enter name';
@@ -186,6 +205,9 @@ export default {
       }
       if (formData.ticketType !== 'exhibitor') {
         formData.supplies = [{ name: '', quantity: 1 }];
+      }
+      if (formData.ticketType !== 'attendee') {
+        formData.ticketSubtype = '';
       }
     };
 
@@ -213,6 +235,10 @@ export default {
 
         if (formData.ticketType === 'student') {
           payload.teacherName = formData.teacherName;
+        }
+
+        if (formData.ticketType === 'attendee') {
+          payload.ticketSubtype = formData.ticketSubtype;
         }
 
         if (formData.ticketType === 'exhibitor') {
@@ -243,6 +269,7 @@ export default {
 
     const resetForm = () => {
       formData.ticketType = 'student';
+      formData.ticketSubtype = '';
       formData.name = '';
       formData.teacherName = '';
       formData.email = '';

@@ -15,16 +15,9 @@
       <nav class="nav-tabs">
         <router-link to="/" class="nav-tab" exact-active-class="active">Dashboard</router-link>
         <router-link to="/tickets" class="nav-tab" active-class="active">Tickets</router-link>
+        <router-link to="/usage" class="nav-tab" active-class="active">Usage</router-link>
+        <router-link to="/settings" class="nav-tab" active-class="active">Settings</router-link>
       </nav>
-
-      <div class="actions-bar">
-        <button @click="goToAddTicket" class="btn-primary">
-          + Add New Ticket
-        </button>
-        <button @click="loadTickets" class="btn-secondary">
-          Refresh
-        </button>
-      </div>
 
       <div v-if="loading" class="loading">Loading tickets...</div>
 
@@ -40,30 +33,36 @@
       </div>
 
       <div v-else class="tickets-content">
-        <div class="filter-bar">
-          <button
-            @click="filterType = 'all'"
-            :class="['filter-btn', { active: filterType === 'all' }]"
-          >
-            All ({{ tickets.length }})
-          </button>
+        <div class="ticket-type-tabs">
           <button
             @click="filterType = 'student'"
-            :class="['filter-btn', { active: filterType === 'student' }]"
+            :class="['type-tab', { active: filterType === 'student' }]"
           >
+            <font-awesome-icon icon="graduation-cap" />
             Students ({{ studentTickets }})
           </button>
           <button
             @click="filterType = 'exhibitor'"
-            :class="['filter-btn', { active: filterType === 'exhibitor' }]"
+            :class="['type-tab', { active: filterType === 'exhibitor' }]"
           >
+            <font-awesome-icon icon="building" />
             Exhibitors ({{ exhibitorTickets }})
           </button>
           <button
-            @click="filterType = 'day_pass'"
-            :class="['filter-btn', { active: filterType === 'day_pass' }]"
+            @click="filterType = 'attendee'"
+            :class="['type-tab', { active: filterType === 'attendee' }]"
           >
-            Day Passes ({{ dayPassTickets }})
+            <font-awesome-icon icon="calendar-day" />
+            Attendees ({{ attendeeTickets }})
+          </button>
+        </div>
+
+        <div class="actions-bar">
+          <button @click="goToAddTicket" class="btn-primary">
+            + Add New Ticket
+          </button>
+          <button @click="loadTickets" class="btn-secondary">
+            Refresh
           </button>
         </div>
 
@@ -130,7 +129,7 @@ export default {
     const loading = ref(true);
     const error = ref('');
     const isChangePasswordOpen = ref(false);
-    const filterType = ref('all');
+    const filterType = ref('student');
 
     const studentTickets = computed(() => 
       tickets.value.filter(t => t.ticket_type === 'student').length
@@ -140,14 +139,11 @@ export default {
       tickets.value.filter(t => t.ticket_type === 'exhibitor').length
     );
 
-    const dayPassTickets = computed(() => 
-      tickets.value.filter(t => t.ticket_type === 'day_pass').length
+    const attendeeTickets = computed(() => 
+      tickets.value.filter(t => t.ticket_type === 'attendee').length
     );
 
     const filteredTickets = computed(() => {
-      if (filterType.value === 'all') {
-        return tickets.value;
-      }
       return tickets.value.filter(t => t.ticket_type === filterType.value);
     });
 
@@ -188,7 +184,7 @@ export default {
       const types = {
         student: 'Student',
         exhibitor: 'Exhibitor',
-        day_pass: 'Day Pass'
+        attendee: 'Attendee'
       };
       return types[type] || type;
     };
@@ -220,7 +216,7 @@ export default {
       filterType,
       studentTickets,
       exhibitorTickets,
-      dayPassTickets,
+      attendeeTickets,
       filteredTickets,
       loadTickets,
       deleteTicket,
@@ -298,32 +294,43 @@ export default {
   margin-bottom: 20px;
 }
 
-.filter-bar {
+.ticket-type-tabs {
   display: flex;
-  gap: 10px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
+  gap: 15px;
+  margin-bottom: 30px;
+  border-bottom: 3px solid #e0e0e0;
+  padding-bottom: 0;
 }
 
-.filter-btn {
-  background: white;
-  color: #667eea;
-  border: 2px solid #667eea;
-  padding: 10px 20px;
-  border-radius: 5px;
+.type-tab {
+  background: transparent;
+  color: #666;
+  border: none;
+  border-bottom: 4px solid transparent;
+  padding: 15px 25px;
   cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 16px;
+  font-weight: 600;
   transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: -3px;
 }
 
-.filter-btn:hover {
-  background: #f0f0ff;
+.type-tab:hover {
+  color: #667eea;
+  background: rgba(102, 126, 234, 0.05);
 }
 
-.filter-btn.active {
-  background: #667eea;
-  color: white;
+.type-tab.active {
+  color: #667eea;
+  border-bottom-color: #667eea;
+  background: rgba(102, 126, 234, 0.05);
+}
+
+.type-tab svg {
+  font-size: 18px;
 }
 
 .tickets-table {
@@ -374,7 +381,7 @@ tr:hover td {
   color: #e65100;
 }
 
-.badge.day_pass {
+.badge.attendee {
   background: #e3f2fd;
   color: #1565c0;
 }
