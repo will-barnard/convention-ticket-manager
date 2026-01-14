@@ -287,17 +287,11 @@ export default {
         // Show popup for errors before setting result
         if (result.status === 'already_used' || result.status === 'already_scanned_today') {
           showErrorPopupNotification('⚠️', result.message || 'Already Scanned Today', 'warning');
-          // Resume scanning after showing popup
-          setTimeout(() => {
-            scanQRCode();
-          }, 3000);
+          // Resume scanning after showing popup - don't call scanQRCode, it will auto-resume
           return;
         } else if (result.status === 'wrong_date') {
           showErrorPopupNotification('✕', result.message || 'Wrong Date - Not Valid Today', 'error');
-          // Resume scanning after showing popup
-          setTimeout(() => {
-            scanQRCode();
-          }, 3000);
+          // Resume scanning after showing popup - don't call scanQRCode, it will auto-resume
           return;
         }
 
@@ -317,8 +311,7 @@ export default {
         }
       } catch (err) {
         console.error('Verification error:', err);
-        // Just resume scanning silently on error
-        scanQRCode();
+        // Just resume scanning silently on error - don't call scanQRCode
       }
     };
 
@@ -328,10 +321,14 @@ export default {
       errorPopupType.value = type;
       showErrorPopup.value = true;
       
-      // Auto-hide after 3 seconds
+      // Auto-hide after 2 seconds and resume scanning
       setTimeout(() => {
         showErrorPopup.value = false;
-      }, 3000);
+        // Resume scanning after popup closes
+        if (cameraActive.value && !verificationResult.value) {
+          scanQRCode();
+        }
+      }, 2000);
     };
 
     const resetScanner = () => {
@@ -616,18 +613,18 @@ video {
   justify-content: center;
   z-index: 10;
   padding: 15px;
+  overflow-y: auto;
 }
 
 .result-card {
   background: white;
   border-radius: 15px;
-  padding: 20px;
+  padding: 24px;
   text-align: center;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  max-width: 90%;
+  max-width: 450px;
   width: 100%;
-  max-height: calc(100% - 30px);
-  overflow-y: auto;
+  margin: auto;
 }
 
 .result-card.success {
