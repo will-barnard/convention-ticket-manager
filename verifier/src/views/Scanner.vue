@@ -21,67 +21,67 @@
             <div class="scanner-overlay">
               <div class="scanner-box"></div>
             </div>
-            
-            <!-- Show verification result overlay on top of camera -->
-            <div v-if="verificationResult" class="result-overlay">
-              <div class="result-card" :class="resultClass">
-                <div class="result-icon">{{ resultIcon }}</div>
-                <h2>{{ resultTitle }}</h2>
-                
-                <div v-if="ticketData" class="ticket-details">
-                  <div class="detail-row">
-                    <span class="label">Name:</span>
-                    <span class="value">{{ ticketData.name }}</span>
-                  </div>
-                  <div v-if="ticketData.ticketType" class="detail-row">
-                    <span class="label">Type:</span>
-                    <span class="value badge" :class="ticketData.ticketType">
-                      {{ formatTicketType(ticketData.ticketType, ticketData.ticketSubtype) }}
-                    </span>
-                  </div>
-                  <div v-if="ticketData.day" class="detail-row">
-                    <span class="label">Day:</span>
-                    <span class="value">{{ formatDay(ticketData.day) }}</span>
-                  </div>
-                  <div v-if="ticketData.allowedDays && ticketData.allowedDays.length > 0" class="detail-row">
-                    <span class="label">Allowed Days:</span>
-                    <span class="value">{{ formatAllowedDays(ticketData.allowedDays) }}</span>
-                  </div>
-                  <div v-if="ticketData.teacherName" class="detail-row">
-                    <span class="label">Teacher:</span>
-                    <span class="value">{{ ticketData.teacherName }}</span>
-                  </div>
-                  
-                  <div v-if="ticketData.supplies && ticketData.supplies.length > 0" class="supplies-section">
-                    <h3>Supplies Provided:</h3>
-                    <ul class="supplies-list">
-                      <li v-for="supply in ticketData.supplies" :key="supply.id">
-                        <span class="supply-name">{{ supply.supply_name }}</span>
-                        <span class="supply-qty">x{{ supply.quantity }}</span>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-
-                <p v-if="resultMessage" class="result-message">{{ resultMessage }}</p>
-
-                <button @click="resetScanner" class="btn-reset">
-                  Scan Another Ticket
-                </button>
-              </div>
-            </div>
-          </div>
-          
-          <!-- Error popup for already used / wrong day -->
-          <div v-if="showErrorPopup" class="error-popup" :class="errorPopupType">
-            <div class="error-popup-content">
-              <div class="error-popup-icon">{{ errorPopupIcon }}</div>
-              <p class="error-popup-message">{{ errorPopupMessage }}</p>
-            </div>
           </div>
           
           <p class="camera-hint">Position QR code within the frame</p>
           <button @click="stopCamera" class="btn-stop">Close Camera</button>
+        </div>
+        
+        <!-- Show verification result overlay above camera -->
+        <div v-if="verificationResult" class="result-overlay">
+          <div class="result-card" :class="resultClass">
+            <div class="result-icon">{{ resultIcon }}</div>
+            <h2>{{ resultTitle }}</h2>
+            
+            <div v-if="ticketData" class="ticket-details">
+              <div class="detail-row">
+                <span class="label">Name:</span>
+                <span class="value">{{ ticketData.name }}</span>
+              </div>
+              <div v-if="ticketData.ticketType" class="detail-row">
+                <span class="label">Type:</span>
+                <span class="value badge" :class="ticketData.ticketType">
+                  {{ formatTicketType(ticketData.ticketType, ticketData.ticketSubtype) }}
+                </span>
+              </div>
+              <div v-if="ticketData.day" class="detail-row">
+                <span class="label">Day:</span>
+                <span class="value">{{ formatDay(ticketData.day) }}</span>
+              </div>
+              <div v-if="ticketData.allowedDays && ticketData.allowedDays.length > 0" class="detail-row">
+                <span class="label">Allowed Days:</span>
+                <span class="value">{{ formatAllowedDays(ticketData.allowedDays) }}</span>
+              </div>
+              <div v-if="ticketData.teacherName" class="detail-row">
+                <span class="label">Teacher:</span>
+                <span class="value">{{ ticketData.teacherName }}</span>
+              </div>
+              
+              <div v-if="ticketData.supplies && ticketData.supplies.length > 0" class="supplies-section">
+                <h3>Supplies Provided:</h3>
+                <ul class="supplies-list">
+                  <li v-for="supply in ticketData.supplies" :key="supply.id">
+                    <span class="supply-name">{{ supply.supply_name }}</span>
+                    <span class="supply-qty">x{{ supply.quantity }}</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <p v-if="resultMessage" class="result-message">{{ resultMessage }}</p>
+
+            <button @click="resetScanner" class="btn-reset">
+              Scan Another Ticket
+            </button>
+          </div>
+        </div>
+        
+        <!-- Error popup for already used / wrong day -->
+        <div v-if="showErrorPopup" class="error-popup" :class="errorPopupType">
+          <div class="error-popup-content">
+            <div class="error-popup-icon">{{ errorPopupIcon }}</div>
+            <p class="error-popup-message">{{ errorPopupMessage }}</p>
+          </div>
         </div>
       </div>
     </div>
@@ -270,8 +270,8 @@ export default {
       
       if (!uuidMatch) {
         console.error('Invalid QR code format:', data);
-        // Just resume scanning silently
-        scanQRCode();
+        // Show error popup for invalid QR
+        showErrorPopupNotification('✕', 'Invalid QR Code Format', 'error');
         return;
       }
 
@@ -284,14 +284,16 @@ export default {
         const response = await axios.get(`/api/verify/${uuid}`);
         const result = response.data;
 
+        console.log('Verification result:', result);
+
         // Show popup for errors before setting result
         if (result.status === 'already_used' || result.status === 'already_scanned_today') {
+          console.log('Showing already scanned popup');
           showErrorPopupNotification('⚠️', result.message || 'Already Scanned Today', 'warning');
-          // Resume scanning after showing popup - don't call scanQRCode, it will auto-resume
           return;
         } else if (result.status === 'wrong_date') {
+          console.log('Showing wrong date popup');
           showErrorPopupNotification('✕', result.message || 'Wrong Date - Not Valid Today', 'error');
-          // Resume scanning after showing popup - don't call scanQRCode, it will auto-resume
           return;
         }
 
@@ -311,18 +313,23 @@ export default {
         }
       } catch (err) {
         console.error('Verification error:', err);
-        // Just resume scanning silently on error - don't call scanQRCode
+        // Show error popup
+        showErrorPopupNotification('✕', 'Failed to Verify Ticket', 'error');
       }
     };
 
     const showErrorPopupNotification = (icon, message, type) => {
+      console.log('showErrorPopupNotification called:', { icon, message, type });
       errorPopupIcon.value = icon;
       errorPopupMessage.value = message;
       errorPopupType.value = type;
       showErrorPopup.value = true;
       
+      console.log('Error popup state:', showErrorPopup.value);
+      
       // Auto-hide after 2 seconds and resume scanning
       setTimeout(() => {
+        console.log('Hiding error popup and resuming scan');
         showErrorPopup.value = false;
         // Resume scanning after popup closes
         if (cameraActive.value && !verificationResult.value) {
@@ -602,7 +609,7 @@ video {
 }
 
 .result-overlay {
-  position: absolute;
+  position: fixed;
   top: 0;
   left: 0;
   right: 0;
@@ -611,8 +618,8 @@ video {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 10;
-  padding: 15px;
+  z-index: 1100;
+  padding: 20px;
   overflow-y: auto;
 }
 
