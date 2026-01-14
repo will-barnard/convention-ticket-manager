@@ -47,6 +47,24 @@
                 <span class="label">Remaining:</span>
                 <span class="value remaining">{{ day.sold - day.scanned }}</span>
               </div>
+              
+              <div class="breakdown-section">
+                <div class="breakdown-title">Breakdown by Type:</div>
+                <div class="breakdown-items">
+                  <div class="breakdown-item">
+                    <span class="breakdown-label">Student:</span>
+                    <span class="breakdown-value">{{ day.studentCount || 0 }}</span>
+                  </div>
+                  <div class="breakdown-item">
+                    <span class="breakdown-label">Exhibitor:</span>
+                    <span class="breakdown-value">{{ day.exhibitorCount || 0 }}</span>
+                  </div>
+                  <div class="breakdown-item">
+                    <span class="breakdown-label">Attendee:</span>
+                    <span class="breakdown-value">{{ day.attendeeCount || 0 }}</span>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div class="progress-section">
@@ -75,6 +93,24 @@
             <div class="summary-item">
               <div class="summary-value">{{ overallPercentage }}%</div>
               <div class="summary-label">Overall Usage Rate</div>
+            </div>
+          </div>
+          
+          <div class="summary-breakdown">
+            <h4>Breakdown by Type</h4>
+            <div class="summary-breakdown-grid">
+              <div class="summary-breakdown-item">
+                <div class="summary-breakdown-value">{{ totalStudents }}</div>
+                <div class="summary-breakdown-label">Student Tickets</div>
+              </div>
+              <div class="summary-breakdown-item">
+                <div class="summary-breakdown-value">{{ totalExhibitors }}</div>
+                <div class="summary-breakdown-label">Exhibitor Tickets</div>
+              </div>
+              <div class="summary-breakdown-item">
+                <div class="summary-breakdown-value">{{ totalAttendees }}</div>
+                <div class="summary-breakdown-label">Attendee Tickets</div>
+              </div>
             </div>
           </div>
         </div>
@@ -117,6 +153,18 @@ export default {
     const overallPercentage = computed(() => {
       if (totalSold.value === 0) return 0;
       return Math.round((totalScanned.value / totalSold.value) * 100);
+    });
+
+    const totalStudents = computed(() => {
+      return stats.value.reduce((sum, day) => sum + (day.studentCount || 0), 0);
+    });
+
+    const totalExhibitors = computed(() => {
+      return stats.value.reduce((sum, day) => sum + (day.exhibitorCount || 0), 0);
+    });
+
+    const totalAttendees = computed(() => {
+      return stats.value.reduce((sum, day) => sum + (day.attendeeCount || 0), 0);
     });
 
     const loadStats = async () => {
@@ -168,6 +216,9 @@ export default {
       totalSold,
       totalScanned,
       overallPercentage,
+      totalStudents,
+      totalExhibitors,
+      totalAttendees,
       formatDate,
       showChangePassword,
       handleLogout,
@@ -440,6 +491,84 @@ export default {
 .summary-label {
   color: #666;
   font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.breakdown-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 2px solid #e0e0e0;
+}
+
+.breakdown-title {
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 12px;
+  font-size: 15px;
+}
+
+.breakdown-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.breakdown-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+}
+
+.breakdown-label {
+  color: #666;
+  font-size: 13px;
+}
+
+.breakdown-value {
+  font-weight: 600;
+  color: #667eea;
+  font-size: 14px;
+}
+
+.summary-breakdown {
+  margin-top: 30px;
+  padding-top: 30px;
+  border-top: 2px solid #e0e0e0;
+}
+
+.summary-breakdown h4 {
+  margin: 0 0 20px 0;
+  color: #333;
+  font-size: 20px;
+}
+
+.summary-breakdown-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 20px;
+}
+
+.summary-breakdown-item {
+  text-align: center;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 2px solid #e0e0e0;
+}
+
+.summary-breakdown-value {
+  font-size: 28px;
+  font-weight: bold;
+  color: #667eea;
+  margin-bottom: 8px;
+}
+
+.summary-breakdown-label {
+  color: #666;
+  font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }

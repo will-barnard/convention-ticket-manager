@@ -21,15 +21,46 @@ router.get('/', authMiddleware, async (req, res) => {
       'SELECT ticket_id, supply_name, quantity FROM ticket_supplies'
     );
     
-    // Map supplies to tickets
+    // Get all scans for all tickets
+    const scansResult = await db.query(
+      'SELECT ticket_id, scan_date FROM ticket_scans'
+    );
+    
+    // Get convention dates from settings
+    const settingsResult = await db.query('SELECT friday_date, saturday_date, sunday_date FROM settings LIMIT 1');
+    const settings = settingsResult.rows[0] || {};
+    
+    // Map supplies and scans to tickets
     const tickets = ticketsResult.rows.map(ticket => {
       const supplies = suppliesResult.rows
         .filter(s => s.ticket_id === ticket.id)
         .map(s => ({ name: s.supply_name, quantity: s.quantity }));
       
+      // Get scans for this ticket, grouped by day
+      const ticketScans = scansResult.rows.filter(s => s.ticket_id === ticket.id);
+      const scans = {
+        friday: false,
+        saturday: false,
+        sunday: false
+      };
+      
+      ticketScans.forEach(scan => {
+        const scanDateStr = new Date(scan.scan_date).toISOString().split('T')[0];
+        if (settings.friday_date && scanDateStr === new Date(settings.friday_date).toISOString().split('T')[0]) {
+          scans.friday = true;
+        }
+        if (settings.saturday_date && scanDateStr === new Date(settings.saturday_date).toISOString().split('T')[0]) {
+          scans.saturday = true;
+        }
+        if (settings.sunday_date && scanDateStr === new Date(settings.sunday_date).toISOString().split('T')[0]) {
+          scans.sunday = true;
+        }
+      });
+      
       return {
         ...ticket,
-        supplies: supplies.length > 0 ? supplies : null
+        supplies: supplies.length > 0 ? supplies : null,
+        scans: scans
       };
     });
     

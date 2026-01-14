@@ -12,7 +12,7 @@
         <router-link to="/settings" class="nav-tab" active-class="active">Settings</router-link>
       </nav>
 
-      <div v-if="!loading && !datesConfigured" class="warning-banner">
+      <div v-if="showWarning && !loading && !datesConfigured" class="warning-banner">
         <div class="warning-content">
           <span class="warning-icon">⚠️</span>
           <div class="warning-text">
@@ -173,6 +173,8 @@ export default {
       return settings.value.friday_date || settings.value.saturday_date || settings.value.sunday_date;
     });
 
+    const showWarning = ref(false);
+
     const loadTickets = async () => {
       loading.value = true;
       error.value = '';
@@ -218,6 +220,11 @@ export default {
       authStore.initAuth();
       loadTickets();
       fetchSettings();
+      
+      // Wait 5 seconds before showing warning banner
+      setTimeout(() => {
+        showWarning.value = true;
+      }, 5000);
     });
 
     return {
@@ -234,6 +241,7 @@ export default {
       availableTickets,
       datesConfigured,
       settings,
+      showWarning,
       goToAddTicket,
       goToTickets,
       showChangePassword,

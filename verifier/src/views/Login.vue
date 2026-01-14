@@ -8,7 +8,7 @@
           </div>
           <div v-else class="icon">✓</div>
           <h1>{{ conventionName }}</h1>
-          <p class="subtitle">Ticket Verifier</p>
+          <p class="subtitle">Ticket Scanner</p>
         </div>
         
         <form @submit.prevent="handleLogin">

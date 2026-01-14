@@ -1,7 +1,7 @@
 <template>
   <div class="home">
     <header class="header">
-      <h1>Ticket Verifier</h1>
+      <h1>Ticket Scanner</h1>
       <button @click="handleLogout" class="btn-logout">Logout</button>
     </header>
 
@@ -9,7 +9,7 @@
       <div class="welcome-card">
         <div class="welcome-icon">✓</div>
         <h2>Welcome, {{ authStore.user?.username || 'Verifier' }}</h2>
-        <p>Ready to verify tickets</p>
+        <p>Ready to scan tickets</p>
       </div>
 
       <button @click="goToScanner" class="btn-scan">

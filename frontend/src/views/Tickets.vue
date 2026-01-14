@@ -65,9 +65,10 @@
               <tr>
                 <th>Type</th>
                 <th>Name</th>
-                <th>Teacher/Info</th>
+                <th v-if="filterType === 'student'">Teacher</th>
+                <th v-if="filterType === 'attendee'">Check-in Status</th>
                 <th>Email</th>
-                <th>Status</th>
+                <th v-if="filterType !== 'attendee'">Status</th>
                 <th>Created</th>
                 <th>Actions</th>
               </tr>
@@ -80,9 +81,25 @@
                   </span>
                 </td>
                 <td>{{ ticket.name }}</td>
-                <td>{{ ticket.teacher_name || '-' }}</td>
+                <td v-if="filterType === 'student'">{{ ticket.teacher_name || '-' }}</td>
+                <td v-if="filterType === 'attendee'">
+                  <div class="checkin-boxes">
+                    <div v-if="canCheckInOn(ticket, 'friday')" class="checkin-box" :class="{ checked: ticket.scans?.friday }">
+                      <span class="day-label">Fri</span>
+                      <font-awesome-icon v-if="ticket.scans?.friday" icon="check" class="check-icon" />
+                    </div>
+                    <div v-if="canCheckInOn(ticket, 'saturday')" class="checkin-box" :class="{ checked: ticket.scans?.saturday }">
+                      <span class="day-label">Sat</span>
+                      <font-awesome-icon v-if="ticket.scans?.saturday" icon="check" class="check-icon" />
+                    </div>
+                    <div v-if="canCheckInOn(ticket, 'sunday')" class="checkin-box" :class="{ checked: ticket.scans?.sunday }">
+                      <span class="day-label">Sun</span>
+                      <font-awesome-icon v-if="ticket.scans?.sunday" icon="check" class="check-icon" />
+                    </div>
+                  </div>
+                </td>
                 <td>{{ ticket.email }}</td>
-                <td>
+                <td v-if="filterType !== 'attendee'">
                   <span :class="['status', { used: ticket.is_used }]">
                     {{ ticket.is_used ? 'Used' : 'Available' }}
                   </span>
@@ -184,6 +201,23 @@ export default {
       return types[type] || type;
     };
 
+    const canCheckInOn = (ticket, day) => {
+      if (ticket.ticket_type !== 'attendee') return false;
+      
+      const subtype = ticket.ticket_subtype;
+      const dayMapping = {
+        'vip': ['friday', 'saturday', 'sunday'],
+        'adult_2day': ['saturday', 'sunday'],
+        'adult_saturday': ['saturday'],
+        'adult_sunday': ['sunday'],
+        'child_2day': ['saturday', 'sunday'],
+        'child_saturday': ['saturday'],
+        'child_sunday': ['sunday']
+      };
+      
+      return dayMapping[subtype]?.includes(day) || false;
+    };
+
     const goToAddTicket = () => {
       router.push('/add-ticket');
     };
@@ -217,6 +251,7 @@ export default {
       deleteTicket,
       formatDate,
       formatTicketType,
+      canCheckInOn,
       goToAddTicket,
       showChangePassword,
       handleLogout,
@@ -388,6 +423,47 @@ tr:hover td {
 
 .btn-delete:hover {
   background: #d32f2f;
+}
+
+.checkin-boxes {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+}
+
+.checkin-box {
+  width: 50px;
+  height: 50px;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  position: relative;
+}
+
+.checkin-box.checked {
+  background: #e8f5e9;
+  border-color: #4CAF50;
+}
+
+.checkin-box .day-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #666;
+  margin-bottom: 2px;
+}
+
+.checkin-box.checked .day-label {
+  color: #2e7d32;
+}
+
+.checkin-box .check-icon {
+  color: #4CAF50;
+  font-size: 18px;
 }
 
 .loading {

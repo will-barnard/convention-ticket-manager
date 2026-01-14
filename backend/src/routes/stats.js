@@ -55,8 +55,11 @@ router.get('/', authMiddleware, async (req, res) => {
     for (const day of days) {
       const dateStr = new Date(day.date).toISOString().split('T')[0];
       
-      // Count tickets sold for this day
+      // Count tickets sold for this day by type
       let soldCount = 0;
+      let studentCount = 0;
+      let exhibitorCount = 0;
+      let attendeeCount = 0;
       const ticketsForDay = [];
 
       for (const ticket of tickets) {
@@ -65,11 +68,18 @@ router.get('/', authMiddleware, async (req, res) => {
           const allowedDays = getAllowedDaysForSubtype(ticket.ticket_subtype);
           if (allowedDays.includes(day.key)) {
             soldCount++;
+            attendeeCount++;
             ticketsForDay.push(ticket.id);
           }
-        } else {
-          // Student and exhibitor tickets are all-access (count for all days)
+        } else if (ticket.ticket_type === 'student') {
+          // Student tickets are all-access (count for all days)
           soldCount++;
+          studentCount++;
+          ticketsForDay.push(ticket.id);
+        } else if (ticket.ticket_type === 'exhibitor') {
+          // Exhibitor tickets are all-access (count for all days)
+          soldCount++;
+          exhibitorCount++;
           ticketsForDay.push(ticket.id);
         }
       }
@@ -85,7 +95,10 @@ router.get('/', authMiddleware, async (req, res) => {
         date: day.date,
         sold: soldCount,
         scanned: scannedCount,
-        percentage: soldCount > 0 ? Math.round((scannedCount / soldCount) * 100) : 0
+        percentage: soldCount > 0 ? Math.round((scannedCount / soldCount) * 100) : 0,
+        studentCount: studentCount,
+        exhibitorCount: exhibitorCount,
+        attendeeCount: attendeeCount
       });
     }
 
