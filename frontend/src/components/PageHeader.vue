@@ -62,4 +62,41 @@ export default {
   background: #667eea;
   color: white;
 }
+
+@media (max-width: 768px) {
+  .header {
+    padding: 15px 20px;
+    flex-direction: column;
+    gap: 15px;
+    align-items: stretch;
+  }
+
+  .header h1 {
+    font-size: 20px;
+    text-align: center;
+  }
+
+  .header-actions {
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .header-actions span {
+    text-align: center;
+    font-size: 14px;
+  }
+
+  .btn-secondary {
+    width: 100%;
+    padding: 10px;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 480px) {
+  .header h1 {
+    font-size: 18px;
+  }
+}
 </style>

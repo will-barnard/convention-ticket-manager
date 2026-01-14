@@ -517,4 +517,85 @@ button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+@media (max-width: 768px) {
+  .container {
+    padding: 15px;
+  }
+
+  .nav-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .nav-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-tab {
+    padding: 10px 16px;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+
+  .ticket-form {
+    padding: 20px;
+  }
+
+  h2 {
+    font-size: 22px;
+  }
+
+  .ticket-type-selector {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .type-btn {
+    padding: 15px;
+  }
+
+  .attendee-subtypes {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .subtype-btn {
+    padding: 12px;
+    font-size: 13px;
+  }
+
+  .form-group label {
+    font-size: 14px;
+  }
+
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    font-size: 14px;
+  }
+
+  .supply-row {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .supply-row input {
+    width: 100%;
+  }
+
+  .supply-row .btn-remove {
+    width: 100%;
+  }
+
+  .form-actions {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .form-actions button {
+    width: 100%;
+  }
+}
 </style>

@@ -520,4 +520,78 @@ tr:hover td {
 .btn-secondary:hover {
   background: #f0f0ff;
 }
+
+@media (max-width: 768px) {
+  .container {
+    padding: 15px;
+  }
+
+  .nav-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .nav-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-tab {
+    padding: 10px 16px;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+
+  .ticket-type-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 8px;
+  }
+
+  .ticket-type-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .type-tab {
+    padding: 10px 16px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .actions-bar {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .actions-bar button {
+    width: 100%;
+  }
+
+  .tickets-table {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .tickets-table table {
+    min-width: 800px;
+  }
+
+  .checkin-boxes {
+    flex-wrap: nowrap;
+  }
+
+  .checkin-box {
+    width: 45px;
+    height: 45px;
+  }
+
+  .checkin-box .day-label {
+    font-size: 10px;
+  }
+
+  .checkin-box .check-icon {
+    font-size: 16px;
+  }
+}
 </style>

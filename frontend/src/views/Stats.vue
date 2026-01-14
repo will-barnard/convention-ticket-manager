@@ -572,4 +572,115 @@ export default {
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
+
+@media (max-width: 768px) {
+  .container {
+    padding: 15px;
+  }
+
+  .nav-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .nav-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-tab {
+    padding: 10px 16px;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+
+  .stats-content h2 {
+    font-size: 22px;
+    margin-bottom: 20px;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+
+  .day-card {
+    padding: 20px;
+  }
+
+  .day-header h3 {
+    font-size: 20px;
+  }
+
+  .day-header .date {
+    font-size: 13px;
+  }
+
+  .stat-row {
+    padding: 8px 0;
+  }
+
+  .stat-row .label {
+    font-size: 13px;
+  }
+
+  .stat-row .value {
+    font-size: 16px;
+  }
+
+  .breakdown-title {
+    font-size: 14px;
+  }
+
+  .breakdown-item {
+    padding: 6px 10px;
+  }
+
+  .breakdown-label {
+    font-size: 12px;
+  }
+
+  .breakdown-value {
+    font-size: 13px;
+  }
+
+  .summary-card {
+    padding: 20px;
+  }
+
+  .summary-card h3 {
+    font-size: 20px;
+    margin-bottom: 20px;
+  }
+
+  .summary-stats {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+
+  .summary-item {
+    padding: 15px;
+  }
+
+  .summary-value {
+    font-size: 28px;
+  }
+
+  .summary-label {
+    font-size: 12px;
+  }
+
+  .summary-breakdown h4 {
+    font-size: 18px;
+  }
+
+  .summary-breakdown-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .summary-breakdown-value {
+    font-size: 24px;
+  }
+}
 </style>

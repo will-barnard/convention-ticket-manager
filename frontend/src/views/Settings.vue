@@ -951,4 +951,88 @@ export default {
     flex: 1;
   }
 }
+
+@media (max-width: 768px) {
+  .container {
+    padding: 15px;
+  }
+
+  .nav-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .nav-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-tab {
+    padding: 10px 16px;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+
+  .settings-card {
+    padding: 20px;
+  }
+
+  .settings-card h2 {
+    font-size: 20px;
+  }
+
+  .settings-card h3 {
+    font-size: 18px;
+  }
+
+  .form-group label {
+    font-size: 14px;
+  }
+
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    font-size: 14px;
+  }
+
+  .hint {
+    font-size: 12px;
+  }
+
+  .logo-preview img {
+    max-width: 150px;
+    max-height: 150px;
+  }
+
+  .logo-buttons {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .logo-buttons button {
+    width: 100%;
+  }
+
+  .form-actions {
+    flex-direction: column;
+  }
+
+  .btn-save,
+  .btn-batch-send {
+    width: 100%;
+  }
+
+  .batch-send-section h3 {
+    font-size: 16px;
+  }
+
+  .export-buttons {
+    gap: 10px;
+  }
+
+  .btn-export {
+    padding: 12px 20px;
+    font-size: 14px;
+  }
+}
 </style>

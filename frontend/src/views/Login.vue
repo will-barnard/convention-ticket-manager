@@ -230,4 +230,63 @@ input:focus {
   object-fit: contain;
   display: block;
 }
+
+@media (max-width: 768px) {
+  .login-container {
+    padding: 20px;
+  }
+
+  .login-card {
+    padding: 30px 20px;
+  }
+
+  .logo {
+    max-width: 120px;
+    max-height: 80px;
+  }
+
+  h1 {
+    font-size: 24px;
+  }
+
+  .tagline {
+    font-size: 13px;
+  }
+
+  .form-group label {
+    font-size: 13px;
+  }
+
+  .form-group input {
+    font-size: 14px;
+    padding: 10px;
+  }
+
+  .btn-login {
+    padding: 12px;
+    font-size: 15px;
+  }
+
+  .toggle-mode {
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 480px) {
+  .login-container {
+    padding: 15px;
+  }
+
+  .login-card {
+    padding: 25px 15px;
+  }
+
+  h1 {
+    font-size: 22px;
+  }
+
+  .convention-logo {
+    max-height: 80px;
+  }
+}
 </style>
