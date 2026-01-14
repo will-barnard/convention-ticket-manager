@@ -180,6 +180,38 @@
       </div>
       
       <div class="settings-card">
+        <h2>Export Ticket Data</h2>
+        <p class="hint">Download ticket data as CSV files for each ticket type</p>
+        
+        <div class="export-buttons">
+          <button @click="downloadCSV('student')" class="btn-export">
+            <font-awesome-icon icon="graduation-cap" />
+            Download Student Tickets CSV
+          </button>
+          <button @click="downloadCSV('exhibitor')" class="btn-export">
+            <font-awesome-icon icon="building" />
+            Download Exhibitor Tickets CSV
+          </button>
+          <button @click="downloadCSV('attendee')" class="btn-export">
+            <font-awesome-icon icon="calendar-day" />
+            Download Attendee Tickets CSV
+          </button>
+        </div>
+      </div>
+      
+      <div class="settings-card">
+        <h2>Post-Convention Report</h2>
+        <p class="hint">Download a comprehensive report of all tickets with check-in times</p>
+        
+        <div class="export-buttons">
+          <button @click="downloadPostConventionReport" class="btn-export btn-report">
+            <font-awesome-icon icon="file-download" />
+            Download Full Convention Report CSV
+          </button>
+        </div>
+      </div>
+      
+      <div class="settings-card">
         <h2>Future Settings</h2>
         <p class="placeholder-text">Additional settings will be added here in future updates.</p>
       </div>
@@ -367,6 +399,167 @@ export default {
       }
     };
 
+    const downloadCSV = async (ticketType) => {
+      try {
+        const response = await axios.get('/api/tickets');
+        const allTickets = response.data.tickets || response.data;
+        const tickets = allTickets.filter(t => t.ticket_type === ticketType);
+        
+        if (tickets.length === 0) {
+          alert(`No ${ticketType} tickets found to export.`);
+          return;
+        }
+
+        let csvContent = '';
+        
+        if (ticketType === 'student') {
+          // Student CSV: Name, Email, Teacher, Created, Friday Check-in, Saturday Check-in, Sunday Check-in
+          csvContent = 'Name,Email,Teacher,Created,Friday Check-in,Saturday Check-in,Sunday Check-in\n';
+          tickets.forEach(ticket => {
+            const name = `"${ticket.name}"`;
+            const email = ticket.email;
+            const teacher = `"${ticket.teacher_name || ''}"`;
+            const created = new Date(ticket.created_at).toLocaleDateString();
+            const friCheckin = ticket.scans?.friday ? 'Yes' : 'No';
+            const satCheckin = ticket.scans?.saturday ? 'Yes' : 'No';
+            const sunCheckin = ticket.scans?.sunday ? 'Yes' : 'No';
+            csvContent += `${name},${email},${teacher},${created},${friCheckin},${satCheckin},${sunCheckin}\n`;
+          });
+        } else if (ticketType === 'exhibitor') {
+          // Exhibitor CSV: Name, Email, Supplies, Created, Friday Check-in, Saturday Check-in, Sunday Check-in
+          csvContent = 'Name,Email,Supplies,Created,Friday Check-in,Saturday Check-in,Sunday Check-in\n';
+          tickets.forEach(ticket => {
+            const name = `"${ticket.name}"`;
+            const email = ticket.email;
+            const supplies = ticket.supplies 
+              ? `"${ticket.supplies.map(s => `${s.name} (${s.quantity})`).join('; ')}"` 
+              : '""';
+            const created = new Date(ticket.created_at).toLocaleDateString();
+            const friCheckin = ticket.scans?.friday ? 'Yes' : 'No';
+            const satCheckin = ticket.scans?.saturday ? 'Yes' : 'No';
+            const sunCheckin = ticket.scans?.sunday ? 'Yes' : 'No';
+            csvContent += `${name},${email},${supplies},${created},${friCheckin},${satCheckin},${sunCheckin}\n`;
+          });
+        } else if (ticketType === 'attendee') {
+          // Attendee CSV: Name, Email, Ticket Type, Created, Friday Check-in, Saturday Check-in, Sunday Check-in
+          csvContent = 'Name,Email,Ticket Type,Created,Friday Check-in,Saturday Check-in,Sunday Check-in\n';
+          tickets.forEach(ticket => {
+            const name = `"${ticket.name}"`;
+            const email = ticket.email;
+            const subtype = formatAttendeeSubtype(ticket.ticket_subtype);
+            const created = new Date(ticket.created_at).toLocaleDateString();
+            const friCheckin = ticket.scans?.friday ? 'Yes' : 'No';
+            const satCheckin = ticket.scans?.saturday ? 'Yes' : 'No';
+            const sunCheckin = ticket.scans?.sunday ? 'Yes' : 'No';
+            csvContent += `${name},${email},"${subtype}",${created},${friCheckin},${satCheckin},${sunCheckin}\n`;
+          });
+        }
+
+        // Create and download the file
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        const timestamp = new Date().toISOString().split('T')[0];
+        link.setAttribute('href', url);
+        link.setAttribute('download', `${ticketType}-tickets-${timestamp}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch (error) {
+        console.error('Error downloading CSV:', error);
+        alert('Failed to download CSV. Please try again.');
+      }
+    };
+
+    const formatAttendeeSubtype = (subtype) => {
+      const subtypeMap = {
+        'vip': 'VIP (3-Day)',
+        'adult_2day': 'Adult 2-Day',
+        'adult_saturday': 'Adult Saturday',
+        'adult_sunday': 'Adult Sunday',
+        'child_2day': 'Child 2-Day',
+        'child_saturday': 'Child Saturday',
+        'child_sunday': 'Child Sunday'
+      };
+      return subtypeMap[subtype] || subtype;
+    };
+
+    const downloadPostConventionReport = async () => {
+      try {
+        const response = await axios.get('/api/tickets');
+        const allTickets = response.data.tickets || response.data;
+        
+        if (allTickets.length === 0) {
+          alert('No tickets found to export.');
+          return;
+        }
+
+        // Post-Convention Report: All tickets with check-in times
+        let csvContent = 'Name,Email,Ticket Type,Created,Friday Check-in,Saturday Check-in,Sunday Check-in\n';
+        
+        allTickets.forEach(ticket => {
+          const name = `"${ticket.name}"`;
+          const email = ticket.email;
+          
+          // Format ticket type
+          let ticketTypeStr = '';
+          if (ticket.ticket_type === 'student') {
+            ticketTypeStr = 'Student';
+          } else if (ticket.ticket_type === 'exhibitor') {
+            ticketTypeStr = 'Exhibitor';
+          } else if (ticket.ticket_type === 'attendee') {
+            ticketTypeStr = formatAttendeeSubtype(ticket.ticket_subtype);
+          }
+          
+          const created = new Date(ticket.created_at).toLocaleDateString();
+          
+          // Format check-in times or "Didn't Attend"
+          const friCheckin = ticket.scans?.fridayTime 
+            ? new Date(ticket.scans.fridayTime).toLocaleString()
+            : (ticket.ticket_type === 'attendee' && !canAttendDay(ticket.ticket_subtype, 'friday') ? 'N/A' : 'Didn\'t Attend');
+          
+          const satCheckin = ticket.scans?.saturdayTime 
+            ? new Date(ticket.scans.saturdayTime).toLocaleString()
+            : (ticket.ticket_type === 'attendee' && !canAttendDay(ticket.ticket_subtype, 'saturday') ? 'N/A' : 'Didn\'t Attend');
+          
+          const sunCheckin = ticket.scans?.sundayTime 
+            ? new Date(ticket.scans.sundayTime).toLocaleString()
+            : (ticket.ticket_type === 'attendee' && !canAttendDay(ticket.ticket_subtype, 'sunday') ? 'N/A' : 'Didn\'t Attend');
+          
+          csvContent += `${name},${email},"${ticketTypeStr}",${created},"${friCheckin}","${satCheckin}","${sunCheckin}"\n`;
+        });
+
+        // Create and download the file
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        const timestamp = new Date().toISOString().split('T')[0];
+        link.setAttribute('href', url);
+        link.setAttribute('download', `post-convention-report-${timestamp}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch (error) {
+        console.error('Error downloading report:', error);
+        alert('Failed to download report. Please try again.');
+      }
+    };
+
+    const canAttendDay = (subtype, day) => {
+      const dayMapping = {
+        'vip': ['friday', 'saturday', 'sunday'],
+        'adult_2day': ['saturday', 'sunday'],
+        'adult_saturday': ['saturday'],
+        'adult_sunday': ['sunday'],
+        'child_2day': ['saturday', 'sunday'],
+        'child_saturday': ['saturday'],
+        'child_sunday': ['sunday']
+      };
+      return dayMapping[subtype]?.includes(day) || false;
+    };
+
     const getLogoUrl = (logoUrl) => {
       if (!logoUrl) return '';
       // Logo is served through nginx proxy at /uploads
@@ -405,6 +598,8 @@ export default {
       saveSettings,
       getLogoUrl,
       batchSendEmails,
+      downloadCSV,
+      downloadPostConventionReport,
       showChangePassword,
       handleLogout
     };
@@ -703,5 +898,57 @@ export default {
 .placeholder-text {
   color: #999;
   font-style: italic;
+}
+
+.export-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  margin-top: 20px;
+}
+
+.btn-export {
+  padding: 15px 25px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.btn-export:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.btn-export:active {
+  transform: translateY(0);
+}
+
+.btn-report {
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
+}
+
+.btn-report:hover {
+  box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4);
+}
+
+@media (min-width: 768px) {
+  .export-buttons {
+    flex-direction: row;
+  }
+  
+  .btn-export {
+    flex: 1;
+  }
 }
 </style>

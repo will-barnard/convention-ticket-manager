@@ -41,19 +41,26 @@ router.get('/', authMiddleware, async (req, res) => {
       const scans = {
         friday: false,
         saturday: false,
-        sunday: false
+        sunday: false,
+        fridayTime: null,
+        saturdayTime: null,
+        sundayTime: null
       };
       
       ticketScans.forEach(scan => {
         const scanDateStr = new Date(scan.scan_date).toISOString().split('T')[0];
+        const scanTime = new Date(scan.scan_date);
         if (settings.friday_date && scanDateStr === new Date(settings.friday_date).toISOString().split('T')[0]) {
           scans.friday = true;
+          scans.fridayTime = scan.scan_date;
         }
         if (settings.saturday_date && scanDateStr === new Date(settings.saturday_date).toISOString().split('T')[0]) {
           scans.saturday = true;
+          scans.saturdayTime = scan.scan_date;
         }
         if (settings.sunday_date && scanDateStr === new Date(settings.sunday_date).toISOString().split('T')[0]) {
           scans.sunday = true;
+          scans.sundayTime = scan.scan_date;
         }
       });
       
