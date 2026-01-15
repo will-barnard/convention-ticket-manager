@@ -69,6 +69,7 @@
                 <th v-if="filterType === 'attendee'">Check-in Status</th>
                 <th>Email</th>
                 <th v-if="filterType !== 'attendee'">Status</th>
+                <th>Validity</th>
                 <th>Created</th>
                 <th>Actions</th>
               </tr>
@@ -103,6 +104,18 @@
                   <span :class="['status', { used: ticket.is_used }]">
                     {{ ticket.is_used ? 'Used' : 'Available' }}
                   </span>
+                </td>
+                <td>
+                  <select 
+                    :value="ticket.status || 'valid'" 
+                    @change="updateTicketStatus(ticket.id, $event.target.value)"
+                    :class="['status-select', ticket.status || 'valid']"
+                  >
+                    <option value="valid">✓ Valid</option>
+                    <option value="invalid">✗ Invalid</option>
+                    <option value="refunded">↩ Refunded</option>
+                    <option value="chargeback">⚠ Chargeback</option>
+                  </select>
                 </td>
                 <td>{{ formatDate(ticket.created_at) }}</td>
                 <td>
@@ -188,6 +201,23 @@ export default {
       }
     };
 
+    const updateTicketStatus = async (id, status) => {
+      try {
+        await axios.patch(`/api/tickets/${id}/status`, { status });
+        
+        // Update local ticket status
+        const ticket = tickets.value.find(t => t.id === id);
+        if (ticket) {
+          ticket.status = status;
+        }
+      } catch (err) {
+        console.error('Error updating ticket status:', err);
+        alert('Failed to update ticket status. Please try again.');
+        // Reload tickets to revert the change
+        loadTickets();
+      }
+    };
+
     const formatDate = (dateString) => {
       return new Date(dateString).toLocaleDateString();
     };
@@ -249,6 +279,7 @@ export default {
       filteredTickets,
       loadTickets,
       deleteTicket,
+      updateTicketStatus,
       formatDate,
       formatTicketType,
       canCheckInOn,
@@ -519,6 +550,44 @@ tr:hover td {
 
 .btn-secondary:hover {
   background: #f0f0ff;
+}
+
+.status-select {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 2px solid #e0e0e0;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.status-select.valid {
+  background: #d4edda;
+  color: #155724;
+  border-color: #c3e6cb;
+}
+
+.status-select.invalid {
+  background: #f8d7da;
+  color: #721c24;
+  border-color: #f5c6cb;
+}
+
+.status-select.refunded {
+  background: #fff3cd;
+  color: #856404;
+  border-color: #ffeaa7;
+}
+
+.status-select.chargeback {
+  background: #f8d7da;
+  color: #721c24;
+  border-color: #f5c6cb;
+}
+
+.status-select:hover {
+  opacity: 0.8;
 }
 
 @media (max-width: 768px) {

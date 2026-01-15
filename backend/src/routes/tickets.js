@@ -180,6 +180,24 @@ router.post('/',
         } catch (emailErr) {
           console.error('Error sending email:', emailErr);
           emailError = 'Email could not be sent';
+          
+          // Send admin notification about the bounce/failure
+          try {
+            await emailService.sendAdminNotification({
+              subject: 'Email Delivery Failure',
+              message: 'A ticket email failed to send. The recipient may have an invalid email address or the email server rejected the message.',
+              ticketDetails: {
+                recipientEmail: email,
+                recipientName: name,
+                ticketType: `${ticketType}${ticketSubtype ? ` (${ticketSubtype})` : ''}`,
+                ticketId: ticket.id,
+                error: emailErr.message || 'Unknown error'
+              }
+            });
+            console.log('Admin notified of email failure');
+          } catch (notificationErr) {
+            console.error('Failed to send admin notification:', notificationErr);
+          }
         }
       }
 
@@ -222,6 +240,40 @@ router.delete('/:id', authMiddleware, async (req, res) => {
     res.json({ message: 'Ticket deleted successfully' });
   } catch (error) {
     console.error('Error deleting ticket:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update ticket status (protected, admin only)
+router.patch('/:id/status', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    // Validate status value
+    const validStatuses = ['valid', 'invalid', 'refunded', 'chargeback'];
+    if (!status || !validStatuses.includes(status)) {
+      return res.status(400).json({ 
+        error: 'Invalid status. Must be one of: valid, invalid, refunded, chargeback' 
+      });
+    }
+
+    const result = await db.query(
+      'UPDATE tickets SET status = $1 WHERE id = $2 RETURNING id, status',
+      [status, id]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Ticket not found' });
+    }
+
+    console.log(`Ticket ${id} status updated to: ${status}`);
+    res.json({ 
+      message: 'Ticket status updated successfully',
+      ticket: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Error updating ticket status:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -293,6 +345,23 @@ router.post('/batch-send-emails', authMiddleware, async (req, res) => {
       } catch (emailError) {
         console.error(`Failed to send email for ticket ${ticket.id}:`, emailError);
         failedCount++;
+        
+        // Send admin notification about the bounce/failure
+        try {
+          await emailService.sendAdminNotification({
+            subject: 'Batch Email Delivery Failure',
+            message: 'A ticket email failed to send during batch processing. The recipient may have an invalid email address or the email server rejected the message.',
+            ticketDetails: {
+              recipientEmail: ticket.email,
+              recipientName: ticket.name,
+              ticketType: `${ticket.ticket_type}${ticket.ticket_subtype ? ` (${ticket.ticket_subtype})` : ''}`,
+              ticketId: ticket.id,
+              error: emailError.message || 'Unknown error'
+            }
+          });
+        } catch (notificationErr) {
+          console.error('Failed to send admin notification:', notificationErr);
+        }
       }
     }
 

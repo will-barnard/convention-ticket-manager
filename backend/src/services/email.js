@@ -194,6 +194,104 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
   return transporter.sendMail(mailOptions);
 }
 
+// Send admin notification email
+async function sendAdminNotification({ subject, message, ticketDetails }) {
+  // Skip if email not configured or admin email not set
+  if (!isEmailConfigured || !transporter || !process.env.ADMIN_EMAIL) {
+    console.log('⚠️  Admin notification skipped - email or admin email not configured');
+    return { success: false, message: 'Email not configured' };
+  }
+
+  const mailOptions = {
+    from: process.env.EMAIL_FROM,
+    to: process.env.ADMIN_EMAIL,
+    subject: `[Admin Alert] ${subject}`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+          }
+          .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+          }
+          .header {
+            background-color: #f44336;
+            color: white;
+            padding: 20px;
+            text-align: center;
+          }
+          .content {
+            padding: 20px;
+            background-color: #fff3e0;
+            border: 1px solid #ffcc80;
+          }
+          .details {
+            background: white;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+          }
+          .details p {
+            margin: 5px 0;
+          }
+          .footer {
+            text-align: center;
+            padding: 20px;
+            font-size: 12px;
+            color: #666;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>⚠️ Admin Alert</h1>
+          </div>
+          <div class="content">
+            <h2>${subject}</h2>
+            <p>${message}</p>
+            
+            ${ticketDetails ? `
+              <div class="details">
+                <h3>Ticket Details:</h3>
+                ${ticketDetails.recipientEmail ? `<p><strong>Recipient Email:</strong> ${ticketDetails.recipientEmail}</p>` : ''}
+                ${ticketDetails.recipientName ? `<p><strong>Recipient Name:</strong> ${ticketDetails.recipientName}</p>` : ''}
+                ${ticketDetails.ticketType ? `<p><strong>Ticket Type:</strong> ${ticketDetails.ticketType}</p>` : ''}
+                ${ticketDetails.ticketId ? `<p><strong>Ticket ID:</strong> ${ticketDetails.ticketId}</p>` : ''}
+                ${ticketDetails.error ? `<p><strong>Error:</strong> <code>${ticketDetails.error}</code></p>` : ''}
+              </div>
+            ` : ''}
+            
+            <p><strong>Action Required:</strong> Please review this issue and take appropriate action.</p>
+          </div>
+          <div class="footer">
+            <p>This is an automated admin notification from your Convention Ticket Manager.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`✓ Admin notification sent to ${process.env.ADMIN_EMAIL}`);
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to send admin notification:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 module.exports = {
   sendTicketEmail,
+  sendAdminNotification,
 };

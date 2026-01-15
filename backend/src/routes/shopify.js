@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/database');
-const { sendTicketEmail } = require('../services/email');
+const { sendTicketEmail, sendAdminNotification } = require('../services/email');
 const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
 
@@ -18,7 +18,7 @@ const validateApiKey = (req, res, next) => {
 
 // POST endpoint for Shopify to create attendee tickets
 router.post('/create-ticket', validateApiKey, async (req, res) => {
-  const { name, email, ticket_subtype, quantity = 1 } = req.body;
+  const { name, email, ticket_subtype, quantity = 1, shopify_order_id } = req.body;
 
   // Validate required fields
   if (!name || !email || !ticket_subtype) {
@@ -53,6 +53,29 @@ router.post('/create-ticket', validateApiKey, async (req, res) => {
   }
 
   try {
+    // Check for duplicate order - prevent creating tickets multiple times if webhook is sent again
+    if (shopify_order_id) {
+      const duplicateCheck = await db.query(
+        'SELECT id, uuid, shopify_order_id, email_sent FROM tickets WHERE shopify_order_id = $1',
+        [shopify_order_id]
+      );
+      
+      if (duplicateCheck.rows.length > 0) {
+        console.log(`Duplicate Shopify order detected: ${shopify_order_id}. Returning existing tickets.`);
+        return res.status(200).json({
+          success: true,
+          message: 'Order already processed',
+          duplicate: true,
+          tickets: duplicateCheck.rows.map(ticket => ({
+            id: ticket.id,
+            uuid: ticket.uuid,
+            shopify_order_id: ticket.shopify_order_id,
+            email_sent: ticket.email_sent
+          }))
+        });
+      }
+    }
+    
     // Check if auto_send_emails is enabled
     const settingsResult = await db.query('SELECT auto_send_emails FROM settings LIMIT 1');
     const autoSendEmails = settingsResult.rows[0]?.auto_send_emails ?? true;
@@ -67,10 +90,10 @@ router.post('/create-ticket', validateApiKey, async (req, res) => {
         
         // Insert ticket into database
         const result = await db.query(
-          `INSERT INTO tickets (ticket_type, ticket_subtype, name, email, uuid, email_sent, created_at) 
-           VALUES ($1, $2, $3, $4, $5, $6, NOW()) 
+          `INSERT INTO tickets (ticket_type, ticket_subtype, name, email, uuid, shopify_order_id, email_sent, created_at) 
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) 
            RETURNING *`,
-          ['attendee', ticket_subtype, name, email, uuid, false]
+          ['attendee', ticket_subtype, name, email, uuid, shopify_order_id || null, false]
         );
 
         const ticket = result.rows[0];
@@ -101,13 +124,30 @@ router.post('/create-ticket', validateApiKey, async (req, res) => {
             ticket.email_sent = true;
           } catch (emailError) {
             console.error('Failed to send ticket email:', emailError);
-            // Don't fail the request if email fails, just log it
+            
+            // Send admin notification about the bounce/failure
+            try {
+              await sendAdminNotification({
+                subject: 'Shopify Order Email Delivery Failure',
+                message: 'A ticket email from a Shopify order failed to send. The recipient may have an invalid email address or the email server rejected the message.',
+                ticketDetails: {
+                  recipientEmail: ticket.email,
+                  recipientName: ticket.name,
+                  ticketType: `${ticket.ticket_type} (${ticket.ticket_subtype})`,
+                  ticketId: ticket.id,
+                  error: emailError.message || 'Unknown error'
+                }
+              });
+            } catch (notificationErr) {
+              console.error('Failed to send admin notification:', notificationErr);
+            }
           }
         }
 
         createdTickets.push({
           id: ticket.id,
           uuid: ticket.uuid,
+          shopify_order_id: ticket.shopify_order_id,
           email_sent: ticket.email_sent
         });
       } catch (ticketError) {

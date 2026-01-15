@@ -302,10 +302,6 @@
         </div>
       </div>
       
-      <div class="settings-card">
-        <h2>Future Settings</h2>
-        <p class="placeholder-text">Additional settings will be added here in future updates.</p>
-      </div>
     </div>
   </div>
 </template>
