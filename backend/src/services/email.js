@@ -38,6 +38,7 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
   console.log('   SMTP_USER:', process.env.SMTP_USER);
   console.log('   SMTP_PASS:', process.env.SMTP_PASS ? `${process.env.SMTP_PASS.substring(0, 4)}****` : 'NOT SET');
   console.log('   EMAIL_FROM:', process.env.EMAIL_FROM);
+  console.log('   EMAIL_FROM exact value:', JSON.stringify(process.env.EMAIL_FROM));
   console.log('   Sending to:', to);
   
   const ticketTypeLabels = {
