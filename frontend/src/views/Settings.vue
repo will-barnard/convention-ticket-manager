@@ -117,6 +117,12 @@
             </label>
             <p class="hint">When enabled, ticket emails will be sent immediately upon creation</p>
           </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn-save" :disabled="saving">
+              {{ saving ? 'Saving...' : 'Save Email Settings' }}
+            </button>
+          </div>
         </form>
 
         <div class="batch-send-section">
