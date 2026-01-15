@@ -179,6 +179,97 @@
         </form>
       </div>
       
+      <div v-if="authStore.user?.role === 'superadmin'" class="settings-card superadmin-section">
+        <h2>🔒 SuperAdmin Controls</h2>
+        <p class="hint danger-hint">⚠️ These actions are irreversible and should be used with extreme caution</p>
+        
+        <div class="superadmin-actions">
+          <div class="action-item">
+            <div class="action-info">
+              <h3>Reset Database</h3>
+              <p>Delete all tickets, scans, and supplies from the database. User accounts will NOT be affected.</p>
+            </div>
+            <button @click="confirmResetDatabase" class="btn-danger" :disabled="resetting">
+              {{ resetting ? 'Resetting...' : 'Reset Database' }}
+            </button>
+          </div>
+        </div>
+        
+        <div v-if="resetMessage" :class="['action-message', resetMessageType]">
+          {{ resetMessage }}
+        </div>
+      </div>
+      
+      <div v-if="authStore.user?.role === 'superadmin'" class="settings-card migration-section">
+        <h2>🔄 Database Migration</h2>
+        <p class="hint">Transfer ticket data between instances of this application</p>
+        
+        <!-- Receive Mode Toggle -->
+        <div class="migration-subsection">
+          <h3>Receive Mode</h3>
+          <p class="hint">Enable this mode to allow another instance to send data to this one</p>
+          
+          <div class="receive-mode-toggle">
+            <label class="toggle-label">
+              <input 
+                type="checkbox" 
+                v-model="receiveModeEnabled" 
+                @change="toggleReceiveMode"
+                :disabled="togglingReceiveMode"
+              />
+              <span>{{ receiveModeEnabled ? 'Receive Mode Enabled' : 'Receive Mode Disabled' }}</span>
+            </label>
+          </div>
+          
+          <div v-if="receiveModeEnabled && receiveModeSecret" class="secret-display">
+            <label>Secret Key (required for sending):</label>
+            <div class="secret-key-box">
+              <code>{{ receiveModeSecret }}</code>
+              <button @click="copySecret" class="btn-copy">
+                <font-awesome-icon icon="copy" />
+                Copy
+              </button>
+            </div>
+            <p class="hint">⚠️ Keep this secret key secure. Anyone with it can send data to this instance.</p>
+          </div>
+        </div>
+        
+        <!-- Export/Send Database -->
+        <div class="migration-subsection">
+          <h3>Export Database to Another Instance</h3>
+          <p class="hint">Send all tickets, scans, and supplies to another instance in receive mode</p>
+          
+          <div class="form-group">
+            <label>Target Instance URL</label>
+            <input 
+              type="text" 
+              v-model="exportTargetUrl" 
+              placeholder="https://example.com"
+              :disabled="exporting"
+            />
+            <p class="hint">Enter the root URL of the target instance (e.g., http://192.168.1.100:8080)</p>
+          </div>
+          
+          <div class="form-group">
+            <label>Target Instance Secret Key</label>
+            <input 
+              type="text" 
+              v-model="exportSecretKey" 
+              placeholder="Enter the secret key from the target instance"
+              :disabled="exporting"
+            />
+          </div>
+          
+          <button @click="confirmExportDatabase" class="btn-export-db" :disabled="exporting || !exportTargetUrl || !exportSecretKey">
+            {{ exporting ? 'Sending...' : 'Send Database to Target' }}
+          </button>
+        </div>
+        
+        <div v-if="migrationMessage" :class="['action-message', migrationMessageType]">
+          {{ migrationMessage }}
+        </div>
+      </div>
+      
       <div class="settings-card">
         <h2>Export Ticket Data</h2>
         <p class="hint">Download ticket data as CSV files for each ticket type</p>
@@ -258,6 +349,19 @@ export default {
     const batchMessage = ref('');
     const batchMessageType = ref('');
     const batchProgress = ref({ sent: 0, total: 0 });
+    const resetting = ref(false);
+    const resetMessage = ref('');
+    const resetMessageType = ref('');
+    
+    // Migration refs
+    const receiveModeEnabled = ref(false);
+    const receiveModeSecret = ref('');
+    const togglingReceiveMode = ref(false);
+    const exportTargetUrl = ref('');
+    const exportSecretKey = ref('');
+    const exporting = ref(false);
+    const migrationMessage = ref('');
+    const migrationMessageType = ref('');
 
     const fetchSettings = async () => {
       try {
@@ -276,6 +380,10 @@ export default {
         }
         
         settings.value = data;
+        
+        // Load receive mode settings
+        receiveModeEnabled.value = data.receive_mode_enabled || false;
+        receiveModeSecret.value = data.receive_mode_secret || '';
       } catch (error) {
         console.error('Error fetching settings:', error);
       }
@@ -566,6 +674,141 @@ export default {
       return logoUrl;
     };
 
+    const confirmResetDatabase = () => {
+      const confirmed = confirm(
+        '⚠️ WARNING: This will permanently delete ALL tickets, scans, and supplies from the database.\n\n' +
+        'User accounts will NOT be affected.\n\n' +
+        'This action CANNOT be undone.\n\n' +
+        'Are you absolutely sure you want to reset the database?'
+      );
+      
+      if (confirmed) {
+        const doubleConfirm = confirm(
+          '⚠️ FINAL CONFIRMATION\n\n' +
+          'Please confirm one more time that you want to delete ALL ticket data.\n\n' +
+          'Type YES in your mind and click OK to proceed.'
+        );
+        
+        if (doubleConfirm) {
+          resetDatabase();
+        }
+      }
+    };
+
+    const resetDatabase = async () => {
+      resetting.value = true;
+      resetMessage.value = '';
+      
+      try {
+        const response = await axios.delete('/api/tickets/reset-database');
+        resetMessage.value = `Database reset successful. Deleted ${response.data.deleted.tickets} tickets.`;
+        resetMessageType.value = 'success';
+        
+        // Clear message after 10 seconds
+        setTimeout(() => {
+          resetMessage.value = '';
+        }, 10000);
+      } catch (error) {
+        console.error('Error resetting database:', error);
+        if (error.response?.status === 403) {
+          resetMessage.value = 'Access denied. SuperAdmin privileges required.';
+        } else {
+          resetMessage.value = 'Failed to reset database. Please try again.';
+        }
+        resetMessageType.value = 'error';
+      } finally {
+        resetting.value = false;
+      }
+    };
+    
+    // Migration functions
+    const toggleReceiveMode = async () => {
+      togglingReceiveMode.value = true;
+      migrationMessage.value = '';
+      
+      try {
+        const response = await axios.put('/api/settings/receive-mode', {
+          enabled: receiveModeEnabled.value
+        });
+        
+        receiveModeSecret.value = response.data.receive_mode_secret || '';
+        
+        migrationMessage.value = receiveModeEnabled.value 
+          ? 'Receive mode enabled. Share the secret key with the source instance.'
+          : 'Receive mode disabled.';
+        migrationMessageType.value = 'success';
+        
+        setTimeout(() => {
+          migrationMessage.value = '';
+        }, 10000);
+      } catch (error) {
+        console.error('Error toggling receive mode:', error);
+        migrationMessage.value = error.response?.data?.error || 'Failed to toggle receive mode';
+        migrationMessageType.value = 'error';
+        // Revert toggle
+        receiveModeEnabled.value = !receiveModeEnabled.value;
+      } finally {
+        togglingReceiveMode.value = false;
+      }
+    };
+    
+    const copySecret = () => {
+      navigator.clipboard.writeText(receiveModeSecret.value);
+      migrationMessage.value = 'Secret key copied to clipboard!';
+      migrationMessageType.value = 'success';
+      setTimeout(() => {
+        migrationMessage.value = '';
+      }, 3000);
+    };
+    
+    const confirmExportDatabase = () => {
+      const confirmed = confirm(
+        '⚠️ EXPORT DATABASE WARNING\n\n' +
+        `You are about to send all tickets, scans, and supplies to:\n${exportTargetUrl.value}\n\n` +
+        'The target instance must be in receive mode.\n\n' +
+        'This will transfer all your ticket data to the target instance.\n\n' +
+        'Are you sure you want to proceed?'
+      );
+      
+      if (confirmed) {
+        exportDatabase();
+      }
+    };
+    
+    const exportDatabase = async () => {
+      exporting.value = true;
+      migrationMessage.value = '';
+      
+      try {
+        const response = await axios.post('/api/migration/send', {
+          targetUrl: exportTargetUrl.value,
+          secret: exportSecretKey.value
+        });
+        
+        migrationMessage.value = 
+          `Migration successful! Sent ${response.data.sent.tickets} tickets, ` +
+          `${response.data.sent.scans} scans, ${response.data.sent.supplies} supplies.`;
+        migrationMessageType.value = 'success';
+        
+        // Clear form
+        exportTargetUrl.value = '';
+        exportSecretKey.value = '';
+        
+        setTimeout(() => {
+          migrationMessage.value = '';
+        }, 15000);
+      } catch (error) {
+        console.error('Error exporting database:', error);
+        migrationMessage.value = error.response?.data?.error || 'Failed to export database';
+        if (error.response?.data?.details) {
+          migrationMessage.value += ': ' + error.response.data.details;
+        }
+        migrationMessageType.value = 'error';
+      } finally {
+        exporting.value = false;
+      }
+    };
+
     const showChangePassword = () => {
       isChangePasswordOpen.value = true;
     };
@@ -592,6 +835,17 @@ export default {
       batchMessage,
       batchMessageType,
       batchProgress,
+      resetting,
+      resetMessage,
+      resetMessageType,
+      receiveModeEnabled,
+      receiveModeSecret,
+      togglingReceiveMode,
+      exportTargetUrl,
+      exportSecretKey,
+      exporting,
+      migrationMessage,
+      migrationMessageType,
       isChangePasswordOpen,
       handleLogoSelect,
       removeLogo,
@@ -600,6 +854,10 @@ export default {
       batchSendEmails,
       downloadCSV,
       downloadPostConventionReport,
+      confirmResetDatabase,
+      toggleReceiveMode,
+      copySecret,
+      confirmExportDatabase,
       showChangePassword,
       handleLogout
     };
@@ -952,6 +1210,200 @@ export default {
   }
 }
 
+/* SuperAdmin Section Styles */
+.superadmin-section {
+  border: 2px solid #ff4444;
+  background: #fff5f5;
+}
+
+.superadmin-section h2 {
+  color: #cc0000;
+}
+
+.superadmin-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.action-item {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.btn-danger {
+  background: #ff4444;
+  color: white;
+  border: none;
+  padding: 1rem 2rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #cc0000;
+}
+
+.btn-danger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.danger-hint {
+  color: #cc0000;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.action-message {
+  margin-top: 1rem;
+  padding: 1rem;
+  border-radius: 8px;
+  text-align: center;
+  font-weight: 500;
+}
+
+.action-message.success {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.action-message.error {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+/* Migration Section Styles */
+.migration-section {
+  border: 2px solid #667eea;
+  background: #f0f4ff;
+}
+
+.migration-section h2 {
+  color: #667eea;
+}
+
+.migration-subsection {
+  margin-bottom: 2rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid #d0d0d0;
+}
+
+.migration-subsection:last-of-type {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.migration-subsection h3 {
+  color: #555;
+  font-size: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.receive-mode-toggle {
+  margin: 1.5rem 0;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 600;
+  color: #555;
+  cursor: pointer;
+}
+
+.toggle-label input[type="checkbox"] {
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+}
+
+.toggle-label span {
+  font-size: 1rem;
+}
+
+.secret-display {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+
+.secret-display label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: #555;
+}
+
+.secret-key-box {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  background: #f5f5f5;
+  padding: 1rem;
+  border-radius: 8px;
+  border: 1px solid #d0d0d0;
+}
+
+.secret-key-box code {
+  flex: 1;
+  font-family: 'Courier New', monospace;
+  font-size: 0.875rem;
+  word-break: break-all;
+  color: #333;
+}
+
+.btn-copy {
+  background: #667eea;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: background 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.btn-copy:hover {
+  background: #5568d3;
+}
+
+.btn-export-db {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 1rem 2rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 600;
+  transition: transform 0.2s;
+  margin-top: 1rem;
+}
+
+.btn-export-db:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.btn-export-db:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 @media (max-width: 768px) {
   .container {
     padding: 15px;
@@ -1018,7 +1470,9 @@ export default {
   }
 
   .btn-save,
-  .btn-batch-send {
+  .btn-batch-send,
+  .btn-danger,
+  .btn-export-db {
     width: 100%;
   }
 

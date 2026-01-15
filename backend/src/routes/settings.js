@@ -2,9 +2,11 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/database');
 const auth = require('../middleware/auth');
+const superAdminMiddleware = require('../middleware/superadmin');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
 // Configure multer for logo upload
 const storage = multer.diskStorage({
@@ -154,6 +156,43 @@ router.delete('/logo', auth, async (req, res) => {
   } catch (error) {
     console.error('Error deleting logo:', error);
     res.status(500).json({ error: 'Failed to delete logo' });
+  }
+});
+
+// Toggle receive mode (SuperAdmin only)
+router.put('/receive-mode', superAdminMiddleware, async (req, res) => {
+  try {
+    const { enabled } = req.body;
+    
+    // Get current settings
+    const checkResult = await db.query('SELECT * FROM settings LIMIT 1');
+    
+    if (checkResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Settings not found' });
+    }
+    
+    let secret = checkResult.rows[0].receive_mode_secret;
+    
+    // Generate new secret if enabling and no secret exists
+    if (enabled && !secret) {
+      secret = crypto.randomBytes(32).toString('hex');
+    }
+    
+    // Clear secret if disabling
+    if (!enabled) {
+      secret = null;
+    }
+    
+    const result = await db.query(
+      'UPDATE settings SET receive_mode_enabled = $1, receive_mode_secret = $2, updated_at = NOW() WHERE id = $3 RETURNING receive_mode_enabled, receive_mode_secret',
+      [enabled, secret, checkResult.rows[0].id]
+    );
+    
+    console.log(`Receive mode ${enabled ? 'enabled' : 'disabled'}`);
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error toggling receive mode:', error);
+    res.status(500).json({ error: 'Failed to toggle receive mode' });
   }
 });
 

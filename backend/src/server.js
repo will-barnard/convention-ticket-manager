@@ -19,6 +19,7 @@ const userRoutes = require('./routes/user');
 const settingsRoutes = require('./routes/settings');
 const statsRoutes = require('./routes/stats');
 const shopifyRoutes = require('./routes/shopify');
+const migrationRoutes = require('./routes/migration');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -37,6 +38,7 @@ app.use('/api/user', userRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/shopify', shopifyRoutes);
+app.use('/api/migration', migrationRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
