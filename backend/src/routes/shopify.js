@@ -50,42 +50,41 @@ router.post('/create-ticket', validateShopifyHmac, async (req, res) => {
   console.log('Body:', JSON.stringify(req.body, null, 2));
   console.log('================================================================');
   
-  const { name, email, ticket_subtype, quantity = 1, shopify_order_id } = req.body;
+  const { line_items, customer, id: order_id } = req.body;
+
+  // SKU to ticket type/subtype mapping
+  const skuMapping = {
+    'vip-pass-adult': { type: 'attendee', subtype: 'vip' },
+    '2-day-pass-adult': { type: 'attendee', subtype: 'adult_2day' },
+    '1-day-pass-adult-saturday': { type: 'attendee', subtype: 'adult_saturday' },
+    '1-day-pass-adult-sunday': { type: 'attendee', subtype: 'adult_sunday' },
+    '1-day-pass-child-saturday': { type: 'attendee', subtype: 'child_saturday' },
+    '1-day-pass-child-sunday': { type: 'attendee', subtype: 'child_sunday' },
+    '2-day-pass-child': { type: 'attendee', subtype: 'child_2day' },
+    'indie-cymbalsmith-event-ticket': { type: 'cymbal_summit', subtype: null }
+  };
 
   // Validate required fields
-  if (!name || !email || !ticket_subtype) {
-    console.log('❌ 400 Bad Request: Missing required fields', { name, email, ticket_subtype });
+  if (!line_items || !Array.isArray(line_items)) {
+    console.log('❌ 400 Bad Request: Missing or invalid line_items array');
     return res.status(400).json({ 
-      error: 'Missing required fields: name, email, and ticket_subtype are required' 
+      error: 'Missing required field: line_items must be an array' 
     });
   }
 
-  // Validate ticket subtype
-  const validSubtypes = [
-    'vip',
-    'adult_2day',
-    'adult_saturday',
-    'adult_sunday',
-    'child_2day',
-    'child_saturday',
-    'child_sunday'
-  ];
-
-  if (!validSubtypes.includes(ticket_subtype)) {
-    console.log('❌ 400 Bad Request: Invalid ticket_subtype', { provided: ticket_subtype, validSubtypes });
+  if (!customer || !customer.email || !customer.first_name) {
+    console.log('❌ 400 Bad Request: Missing customer information', { customer });
     return res.status(400).json({ 
-      error: 'Invalid ticket_subtype',
-      validSubtypes 
+      error: 'Missing required fields: customer.email and customer.first_name are required' 
     });
   }
 
-  // Validate quantity
-  if (typeof quantity !== 'number' || quantity < 1 || quantity > 10) {
-    console.log('❌ 400 Bad Request: Invalid quantity', { quantity, type: typeof quantity });
-    return res.status(400).json({ 
-      error: 'Quantity must be a number between 1 and 10' 
-    });
-  }
+  const shopify_order_id = order_id ? String(order_id) : null;
+  const customerName = `${customer.first_name} ${customer.last_name || ''}`.trim();
+  const customerEmail = customer.email;
+
+  console.log(`📦 Processing order ${shopify_order_id} for ${customerName} (${customerEmail})`);
+  console.log(`   Found ${line_items.length} line item(s) in order`);
 
   try {
     // Check for duplicate order - prevent creating tickets multiple times if webhook is sent again
@@ -110,6 +109,23 @@ router.post('/create-ticket', validateShopifyHmac, async (req, res) => {
         });
       }
     }
+
+    // Filter line items that have matching ticket SKUs
+    const ticketLineItems = line_items.filter(item => {
+      const sku = item.sku?.toLowerCase();
+      return sku && skuMapping[sku];
+    });
+
+    console.log(`🎫 Found ${ticketLineItems.length} ticket line item(s) to process`);
+
+    if (ticketLineItems.length === 0) {
+      console.log('ℹ️  No ticket items found in this order. Skipping ticket creation.');
+      return res.status(200).json({
+        success: true,
+        message: 'No ticket items found in order',
+        tickets: []
+      });
+    }
     
     // Check if auto_send_emails is enabled
     const settingsResult = await db.query('SELECT auto_send_emails FROM settings LIMIT 1');
@@ -118,78 +134,90 @@ router.post('/create-ticket', validateShopifyHmac, async (req, res) => {
     const createdTickets = [];
     const failedTickets = [];
 
-    // Create multiple tickets if quantity > 1
-    for (let i = 0; i < quantity; i++) {
-      try {
-        const uuid = uuidv4();
-        
-        // Insert ticket into database
-        const result = await db.query(
-          `INSERT INTO tickets (ticket_type, ticket_subtype, name, email, uuid, shopify_order_id, email_sent, created_at) 
-           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) 
-           RETURNING *`,
-          ['attendee', ticket_subtype, name, email, uuid, shopify_order_id || null, false]
-        );
+    // Process each ticket line item
+    for (const lineItem of ticketLineItems) {
+      const sku = lineItem.sku.toLowerCase();
+      const ticketMapping = skuMapping[sku];
+      const quantity = lineItem.quantity || 1;
 
-        const ticket = result.rows[0];
+      console.log(`   Processing ${quantity}x ${lineItem.name} (SKU: ${sku} -> ${ticketMapping.type}/${ticketMapping.subtype || 'standard'})`);
 
-        // Generate QR code
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost';
-        const verifyUrl = `${frontendUrl}/verify/${ticket.uuid}`;
-        const qrCodeDataUrl = await QRCode.toDataURL(verifyUrl);
+      // Create multiple tickets if quantity > 1
+      for (let i = 0; i < quantity; i++) {
+        try {
+          const uuid = uuidv4();
+          
+          // Insert ticket into database
+          const result = await db.query(
+            `INSERT INTO tickets (ticket_type, ticket_subtype, name, email, uuid, shopify_order_id, email_sent, created_at) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) 
+             RETURNING *`,
+            [ticketMapping.type, ticketMapping.subtype, customerName, customerEmail, uuid, shopify_order_id, false]
+          );
 
-        // Send email if auto_send_emails is enabled
-        if (autoSendEmails) {
-          try {
-            await sendTicketEmail({
-              to: ticket.email,
-              name: ticket.name,
-              ticketType: ticket.ticket_type,
-              ticketSubtype: ticket.ticket_subtype,
-              qrCodeDataUrl,
-              verifyUrl
-            });
-            
-            // Update email_sent status
-            await db.query(
-              'UPDATE tickets SET email_sent = true, email_sent_at = NOW() WHERE id = $1',
-              [ticket.id]
-            );
-            
-            ticket.email_sent = true;
-          } catch (emailError) {
-            console.error('Failed to send ticket email:', emailError);
-            
-            // Send admin notification about the bounce/failure
+          const ticket = result.rows[0];
+
+          // Generate QR code
+          const frontendUrl = process.env.FRONTEND_URL || 'http://localhost';
+          const verifyUrl = `${frontendUrl}/verify/${ticket.uuid}`;
+          const qrCodeDataUrl = await QRCode.toDataURL(verifyUrl);
+
+          // Send email if auto_send_emails is enabled
+          if (autoSendEmails) {
             try {
-              await sendAdminNotification({
-                subject: 'Shopify Order Email Delivery Failure',
-                message: 'A ticket email from a Shopify order failed to send. The recipient may have an invalid email address or the email server rejected the message.',
-                ticketDetails: {
-                  recipientEmail: ticket.email,
-                  recipientName: ticket.name,
-                  ticketType: `${ticket.ticket_type} (${ticket.ticket_subtype})`,
-                  ticketId: ticket.id,
-                  error: emailError.message || 'Unknown error'
-                }
+              await sendTicketEmail({
+                to: ticket.email,
+                name: ticket.name,
+                ticketType: ticket.ticket_type,
+                ticketSubtype: ticket.ticket_subtype,
+                qrCodeDataUrl,
+                verifyUrl
               });
-            } catch (notificationErr) {
-              console.error('Failed to send admin notification:', notificationErr);
+              
+              // Update email_sent status
+              await db.query(
+                'UPDATE tickets SET email_sent = true, email_sent_at = NOW() WHERE id = $1',
+                [ticket.id]
+              );
+              
+              ticket.email_sent = true;
+            } catch (emailError) {
+              console.error('Failed to send ticket email:', emailError);
+              
+              // Send admin notification about the bounce/failure
+              try {
+                await sendAdminNotification({
+                  subject: 'Shopify Order Email Delivery Failure',
+                  message: 'A ticket email from a Shopify order failed to send. The recipient may have an invalid email address or the email server rejected the message.',
+                  ticketDetails: {
+                    recipientEmail: ticket.email,
+                    recipientName: ticket.name,
+                    ticketType: `${ticket.ticket_type} (${ticket.ticket_subtype})`,
+                    ticketId: ticket.id,
+                    error: emailError.message || 'Unknown error'
+                  }
+                });
+              } catch (notificationErr) {
+                console.error('Failed to send admin notification:', notificationErr);
+              }
             }
           }
-        }
 
-        createdTickets.push({
-          id: ticket.id,
-          uuid: ticket.uuid,
-          shopify_order_id: ticket.shopify_order_id,
-          email_sent: ticket.email_sent
-        });
-      } catch (ticketError) {
-        console.error('Failed to create ticket:', ticketError);
-        failedTickets.push({ error: ticketError.message });
+          createdTickets.push({
+            id: ticket.id,
+            uuid: ticket.uuid,
+            shopify_order_id: ticket.shopify_order_id,
+            email_sent: ticket.email_sent,
+            sku: sku
+          });
+        } catch (ticketError) {
+          console.error('Failed to create ticket:', ticketError);
+          failedTickets.push({ sku, error: ticketError.message });
+        }
       }
     }
+
+    console.log(`✅ Successfully created ${createdTickets.length} ticket(s) from order ${shopify_order_id}`);
 
     res.status(201).json({
       success: true,
@@ -199,8 +227,8 @@ router.post('/create-ticket', validateShopifyHmac, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error creating ticket:', error);
-    res.status(500).json({ error: 'Failed to create ticket' });
+    console.error('Error processing Shopify order:', error);
+    res.status(500).json({ error: 'Failed to process order' });
   }
 });
 
