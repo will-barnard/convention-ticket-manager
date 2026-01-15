@@ -26,6 +26,14 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
+
+// Capture raw body for Shopify webhook verification
+app.use('/api/shopify', express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf.toString('utf8');
+  }
+}));
+
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
 

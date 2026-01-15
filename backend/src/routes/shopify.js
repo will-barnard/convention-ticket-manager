@@ -19,10 +19,16 @@ const validateShopifyHmac = (req, res, next) => {
   }
   
   // Create HMAC hash of the raw body
-  const rawBody = JSON.stringify(req.body);
+  if (!req.rawBody) {
+    console.log('❌ 401 Unauthorized: Raw body not available');
+    return res.status(401).json({ error: 'Unauthorized: Cannot verify signature' });
+  }
+  
+  console.log('Raw body length:', req.rawBody.length);
+  
   const hash = crypto
     .createHmac('sha256', process.env.SHOPIFY_API_KEY)
-    .update(rawBody, 'utf8')
+    .update(req.rawBody, 'utf8')
     .digest('base64');
   
   console.log('Computed HMAC:', hash);
