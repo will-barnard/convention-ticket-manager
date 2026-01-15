@@ -18,6 +18,12 @@ const validateApiKey = (req, res, next) => {
 
 // POST endpoint for Shopify to create attendee tickets
 router.post('/create-ticket', validateApiKey, async (req, res) => {
+  // DEBUG: Log incoming request details
+  console.log('==================== SHOPIFY WEBHOOK REQUEST ====================');
+  console.log('Headers:', JSON.stringify(req.headers, null, 2));
+  console.log('Body:', JSON.stringify(req.body, null, 2));
+  console.log('================================================================');
+  
   const { name, email, ticket_subtype, quantity = 1, shopify_order_id } = req.body;
 
   // Validate required fields

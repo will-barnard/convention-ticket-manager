@@ -296,7 +296,7 @@ export default {
           resultClass.value = 'success';
           resultIcon.value = '✓';
           resultTitle.value = 'Access Granted!';
-          resultMessage.value = 'Ticket verified successfully';
+          resultMessage.value = result.message || 'Issue wristband for re-entry';
         } else {
           resultClass.value = 'error';
           resultIcon.value = '✕';
@@ -312,9 +312,9 @@ export default {
           console.log('Error response data:', result);
           
           // Show popup for errors
-          if (result.status === 'already_used' || result.status === 'already_scanned_today') {
+          if (result.status === 'already_used' || result.status === 'already_scanned_today' || result.status === 'already_scanned') {
             console.log('Showing already scanned popup');
-            showErrorPopupNotification('⚠️', result.message || 'Already Scanned Today', 'warning');
+            showErrorPopupNotification('⚠️', result.message || 'Already Scanned - Check Wristband', 'warning');
             return;
           } else if (result.status === 'wrong_date') {
             console.log('Showing wrong date popup');

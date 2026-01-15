@@ -97,33 +97,20 @@ router.get('/:uuid', async (req, res) => {
       });
     }
 
-    // For attendee tickets, check date restrictions
+    // For attendee tickets, check if already scanned (once only, then wristband)
     if (ticket.ticket_type === 'attendee') {
-      const allowedDays = getAllowedDays(ticket.ticket_subtype);
-      const dateCheck = await checkDateValidity(allowedDays);
-      
-      if (!dateCheck.valid) {
-        return res.status(400).json({
-          status: 'wrong_date',
-          message: dateCheck.message,
-          allowedDays: dateCheck.allowedDays,
-          ticketType: ticket.ticket_type,
-          ticketSubtype: ticket.ticket_subtype,
-          name: ticket.name,
-        });
-      }
-      
-      // Check if ticket has already been scanned today (using server time UTC)
-      const todayUTC = getServerDateUTC();
+      // Check if ticket has already been scanned (ever)
       const scanCheckResult = await db.query(
-        'SELECT id FROM ticket_scans WHERE ticket_id = $1 AND scan_date = $2',
-        [ticket.id, todayUTC]
+        'SELECT id, scan_date FROM ticket_scans WHERE ticket_id = $1 LIMIT 1',
+        [ticket.id]
       );
       
       if (scanCheckResult.rows.length > 0) {
+        const scannedDate = formatDateUTC(scanCheckResult.rows[0].scan_date);
         return res.status(400).json({
-          status: 'already_scanned_today',
-          message: 'This ticket has already been scanned today',
+          status: 'already_scanned',
+          message: 'This ticket has already been scanned. Wristband should have been issued.',
+          scannedOn: scannedDate,
           ticketType: ticket.ticket_type,
           ticketSubtype: ticket.ticket_subtype,
           name: ticket.name,
@@ -131,6 +118,7 @@ router.get('/:uuid', async (req, res) => {
       }
       
       // Record the scan with server time UTC
+      const todayUTC = getServerDateUTC();
       await db.query(
         'INSERT INTO ticket_scans (ticket_id, scan_date) VALUES ($1, $2)',
         [ticket.id, todayUTC]
@@ -138,11 +126,10 @@ router.get('/:uuid', async (req, res) => {
       
       return res.json({
         status: 'valid',
-        message: 'Access granted to the convention',
+        message: 'Access granted - Issue wristband for re-entry',
         ticketType: ticket.ticket_type,
         ticketSubtype: ticket.ticket_subtype,
         name: ticket.name,
-        day: dateCheck.day,
       });
     }
 

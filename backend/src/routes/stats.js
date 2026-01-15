@@ -84,10 +84,9 @@ router.get('/', authMiddleware, async (req, res) => {
         }
       }
 
-      // Count tickets scanned on this day
+      // Count tickets scanned - for multi-day tickets, if scanned once, count for ALL their valid days
       const scannedCount = scans.filter(scan => {
-        const scanDateStr = new Date(scan.scan_date).toISOString().split('T')[0];
-        return scanDateStr === dateStr && ticketsForDay.includes(scan.ticket_id);
+        return ticketsForDay.includes(scan.ticket_id);
       }).length;
 
       stats.push({

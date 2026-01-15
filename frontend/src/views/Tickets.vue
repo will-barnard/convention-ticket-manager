@@ -84,19 +84,12 @@
                 <td>{{ ticket.name }}</td>
                 <td v-if="filterType === 'student'">{{ ticket.teacher_name || '-' }}</td>
                 <td v-if="filterType === 'attendee'">
-                  <div class="checkin-boxes">
-                    <div v-if="canCheckInOn(ticket, 'friday')" class="checkin-box" :class="{ checked: ticket.scans?.friday }">
-                      <span class="day-label">Fri</span>
-                      <font-awesome-icon v-if="ticket.scans?.friday" icon="check" class="check-icon" />
-                    </div>
-                    <div v-if="canCheckInOn(ticket, 'saturday')" class="checkin-box" :class="{ checked: ticket.scans?.saturday }">
-                      <span class="day-label">Sat</span>
-                      <font-awesome-icon v-if="ticket.scans?.saturday" icon="check" class="check-icon" />
-                    </div>
-                    <div v-if="canCheckInOn(ticket, 'sunday')" class="checkin-box" :class="{ checked: ticket.scans?.sunday }">
-                      <span class="day-label">Sun</span>
-                      <font-awesome-icon v-if="ticket.scans?.sunday" icon="check" class="check-icon" />
-                    </div>
+                  <div class="scan-status">
+                    <span v-if="ticket.scans?.scanned" class="scanned">
+                      <font-awesome-icon icon="check-circle" class="check-icon" />
+                      Scanned {{ formatScanDate(ticket.scans.scannedOn) }}
+                    </span>
+                    <span v-else class="not-scanned">Not Scanned</span>
                   </div>
                 </td>
                 <td>{{ ticket.email }}</td>
@@ -231,21 +224,12 @@ export default {
       return types[type] || type;
     };
 
-    const canCheckInOn = (ticket, day) => {
-      if (ticket.ticket_type !== 'attendee') return false;
-      
-      const subtype = ticket.ticket_subtype;
-      const dayMapping = {
-        'vip': ['friday', 'saturday', 'sunday'],
-        'adult_2day': ['saturday', 'sunday'],
-        'adult_saturday': ['saturday'],
-        'adult_sunday': ['sunday'],
-        'child_2day': ['saturday', 'sunday'],
-        'child_saturday': ['saturday'],
-        'child_sunday': ['sunday']
-      };
-      
-      return dayMapping[subtype]?.includes(day) || false;
+    const formatScanDate = (date) => {
+      if (!date) return '';
+      const d = new Date(date);
+      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return `${days[d.getDay()]}, ${months[d.getMonth()]} ${d.getDate()}`;
     };
 
     const goToAddTicket = () => {
@@ -282,7 +266,7 @@ export default {
       updateTicketStatus,
       formatDate,
       formatTicketType,
-      canCheckInOn,
+      formatScanDate,
       goToAddTicket,
       showChangePassword,
       handleLogout,
@@ -456,45 +440,27 @@ tr:hover td {
   background: #d32f2f;
 }
 
-.checkin-boxes {
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-  align-items: center;
+.scan-status {
+  text-align: center;
+  font-size: 13px;
 }
 
-.checkin-box {
-  width: 50px;
-  height: 50px;
-  border: 2px solid #ddd;
-  border-radius: 8px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: white;
-  position: relative;
-}
-
-.checkin-box.checked {
-  background: #e8f5e9;
-  border-color: #4CAF50;
-}
-
-.checkin-box .day-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: #666;
-  margin-bottom: 2px;
-}
-
-.checkin-box.checked .day-label {
+.scan-status .scanned {
   color: #2e7d32;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
 }
 
-.checkin-box .check-icon {
+.scan-status .check-icon {
   color: #4CAF50;
-  font-size: 18px;
+  font-size: 16px;
+}
+
+.scan-status .not-scanned {
+  color: #999;
 }
 
 .loading {
