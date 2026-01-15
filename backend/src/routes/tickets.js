@@ -202,6 +202,38 @@ router.post('/',
   }
 );
 
+// Reset database - Delete all tickets (SuperAdmin only) - MUST come before /:id route
+router.delete('/reset-database', superAdminMiddleware, async (req, res) => {
+  try {
+    console.log('SuperAdmin initiated database reset - deleting all tickets');
+    
+    // Delete all ticket scans first (foreign key constraint)
+    await db.query('DELETE FROM ticket_scans');
+    console.log('✓ Deleted all ticket scans');
+    
+    // Delete all ticket supplies
+    await db.query('DELETE FROM ticket_supplies');
+    console.log('✓ Deleted all ticket supplies');
+    
+    // Delete all tickets
+    const result = await db.query('DELETE FROM tickets RETURNING id');
+    const deletedCount = result.rows.length;
+    console.log(`✓ Deleted ${deletedCount} tickets`);
+    
+    res.json({
+      message: 'Database reset successful',
+      deleted: {
+        tickets: deletedCount,
+        scans: 'all',
+        supplies: 'all'
+      }
+    });
+  } catch (error) {
+    console.error('Error resetting database:', error);
+    res.status(500).json({ error: 'Server error during database reset' });
+  }
+});
+
 // Delete ticket (protected)
 router.delete('/:id', authMiddleware, async (req, res) => {
   try {
@@ -352,36 +384,5 @@ router.post('/batch-send-emails', authMiddleware, async (req, res) => {
   }
 });
 
-// Reset database - Delete all tickets (SuperAdmin only)
-router.delete('/reset-database', superAdminMiddleware, async (req, res) => {
-  try {
-    console.log('SuperAdmin initiated database reset - deleting all tickets');
-    
-    // Delete all ticket scans first (foreign key constraint)
-    await db.query('DELETE FROM ticket_scans');
-    console.log('✓ Deleted all ticket scans');
-    
-    // Delete all ticket supplies
-    await db.query('DELETE FROM ticket_supplies');
-    console.log('✓ Deleted all ticket supplies');
-    
-    // Delete all tickets
-    const result = await db.query('DELETE FROM tickets RETURNING id');
-    const deletedCount = result.rows.length;
-    console.log(`✓ Deleted ${deletedCount} tickets`);
-    
-    res.json({
-      message: 'Database reset successful',
-      deleted: {
-        tickets: deletedCount,
-        scans: 'all',
-        supplies: 'all'
-      }
-    });
-  } catch (error) {
-    console.error('Error resetting database:', error);
-    res.status(500).json({ error: 'Server error during database reset' });
-  }
-});
-
 module.exports = router;
+
