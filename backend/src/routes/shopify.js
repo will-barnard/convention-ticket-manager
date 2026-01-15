@@ -4,24 +4,40 @@ const db = require('../config/database');
 const { sendTicketEmail, sendAdminNotification } = require('../services/email');
 const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
+const crypto = require('crypto');
 
-// Middleware to validate API key for Shopify webhook
-const validateApiKey = (req, res, next) => {
-  const apiKey = req.headers['x-api-key'];
+// Middleware to validate Shopify HMAC signature
+const validateShopifyHmac = (req, res, next) => {
+  const hmacHeader = req.headers['x-shopify-hmac-sha256'];
   
-  console.log('🔑 Shopify webhook request received - validating API key');
+  console.log('🔑 Shopify webhook request received - validating HMAC signature');
+  console.log('HMAC Header:', hmacHeader);
   
-  if (!apiKey || apiKey !== process.env.SHOPIFY_API_KEY) {
-    console.log('❌ 401 Unauthorized: Invalid or missing API key');
-    return res.status(401).json({ error: 'Unauthorized: Invalid API key' });
+  if (!hmacHeader) {
+    console.log('❌ 401 Unauthorized: Missing X-Shopify-Hmac-Sha256 header');
+    return res.status(401).json({ error: 'Unauthorized: Missing HMAC signature' });
   }
   
-  console.log('✓ API key validated successfully');
+  // Create HMAC hash of the raw body
+  const rawBody = JSON.stringify(req.body);
+  const hash = crypto
+    .createHmac('sha256', process.env.SHOPIFY_API_KEY)
+    .update(rawBody, 'utf8')
+    .digest('base64');
+  
+  console.log('Computed HMAC:', hash);
+  
+  if (hash !== hmacHeader) {
+    console.log('❌ 401 Unauthorized: Invalid HMAC signature');
+    return res.status(401).json({ error: 'Unauthorized: Invalid HMAC signature' });
+  }
+  
+  console.log('✓ HMAC signature validated successfully');
   next();
 };
 
 // POST endpoint for Shopify to create attendee tickets
-router.post('/create-ticket', validateApiKey, async (req, res) => {
+router.post('/create-ticket', validateShopifyHmac, async (req, res) => {
   // DEBUG: Log incoming request details
   console.log('==================== SHOPIFY WEBHOOK REQUEST ====================');
   console.log('Headers:', JSON.stringify(req.headers, null, 2));
