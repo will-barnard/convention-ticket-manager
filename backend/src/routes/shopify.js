@@ -9,10 +9,14 @@ const QRCode = require('qrcode');
 const validateApiKey = (req, res, next) => {
   const apiKey = req.headers['x-api-key'];
   
+  console.log('🔑 Shopify webhook request received - validating API key');
+  
   if (!apiKey || apiKey !== process.env.SHOPIFY_API_KEY) {
+    console.log('❌ 401 Unauthorized: Invalid or missing API key');
     return res.status(401).json({ error: 'Unauthorized: Invalid API key' });
   }
   
+  console.log('✓ API key validated successfully');
   next();
 };
 
@@ -28,6 +32,7 @@ router.post('/create-ticket', validateApiKey, async (req, res) => {
 
   // Validate required fields
   if (!name || !email || !ticket_subtype) {
+    console.log('❌ 400 Bad Request: Missing required fields', { name, email, ticket_subtype });
     return res.status(400).json({ 
       error: 'Missing required fields: name, email, and ticket_subtype are required' 
     });
@@ -45,6 +50,7 @@ router.post('/create-ticket', validateApiKey, async (req, res) => {
   ];
 
   if (!validSubtypes.includes(ticket_subtype)) {
+    console.log('❌ 400 Bad Request: Invalid ticket_subtype', { provided: ticket_subtype, validSubtypes });
     return res.status(400).json({ 
       error: 'Invalid ticket_subtype',
       validSubtypes 
@@ -53,6 +59,7 @@ router.post('/create-ticket', validateApiKey, async (req, res) => {
 
   // Validate quantity
   if (typeof quantity !== 'number' || quantity < 1 || quantity > 10) {
+    console.log('❌ 400 Bad Request: Invalid quantity', { quantity, type: typeof quantity });
     return res.status(400).json({ 
       error: 'Quantity must be a number between 1 and 10' 
     });
