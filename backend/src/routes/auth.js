@@ -34,7 +34,7 @@ router.post('/register',
 
       // Create user
       const result = await db.query(
-        'INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id, username',
+        'INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id, username, role',
         [username, hashedPassword]
       );
 
@@ -42,12 +42,12 @@ router.post('/register',
 
       // Generate token
       const token = jwt.sign(
-        { id: user.id, username: user.username },
+        { id: user.id, username: user.username, role: user.role },
         process.env.JWT_SECRET,
         { expiresIn: process.env.JWT_EXPIRES_IN }
       );
 
-      res.status(201).json({ token, user: { id: user.id, username: user.username } });
+      res.status(201).json({ token, user: { id: user.id, username: user.username, role: user.role } });
     } catch (error) {
       console.error('Registration error:', error);
       res.status(500).json({ error: 'Server error' });
@@ -70,7 +70,7 @@ router.post('/login',
 
       // Find user
       const result = await db.query(
-        'SELECT id, username, password FROM users WHERE username = $1',
+        'SELECT id, username, password, role FROM users WHERE username = $1',
         [username]
       );
 
@@ -88,12 +88,12 @@ router.post('/login',
 
       // Generate token
       const token = jwt.sign(
-        { id: user.id, username: user.username },
+        { id: user.id, username: user.username, role: user.role },
         process.env.JWT_SECRET,
         { expiresIn: process.env.JWT_EXPIRES_IN }
       );
 
-      res.json({ token, user: { id: user.id, username: user.username } });
+      res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
     } catch (error) {
       console.error('Login error:', error);
       res.status(500).json({ error: 'Server error' });

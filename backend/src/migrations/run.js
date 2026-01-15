@@ -13,7 +13,7 @@ async function runMigrations() {
         password VARCHAR(255) NOT NULL,
         role VARCHAR(50) DEFAULT 'admin',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT valid_role CHECK (role IN ('admin', 'verifier'))
+        CONSTRAINT valid_role CHECK (role IN ('admin', 'verifier', 'superadmin'))
       )
     `);
     console.log('✓ Users table created');
@@ -27,8 +27,16 @@ async function runMigrations() {
           WHERE table_name = 'users' AND column_name = 'role'
         ) THEN
           ALTER TABLE users ADD COLUMN role VARCHAR(50) DEFAULT 'admin';
-          ALTER TABLE users ADD CONSTRAINT valid_role CHECK (role IN ('admin', 'verifier'));
         END IF;
+        
+        -- Update constraint to include superadmin
+        IF EXISTS (
+          SELECT 1 FROM information_schema.table_constraints 
+          WHERE constraint_name = 'valid_role' AND table_name = 'users'
+        ) THEN
+          ALTER TABLE users DROP CONSTRAINT valid_role;
+        END IF;
+        ALTER TABLE users ADD CONSTRAINT valid_role CHECK (role IN ('admin', 'verifier', 'superadmin'));
       END $$;
     `);
     console.log('✓ Role column ensured');
