@@ -32,7 +32,9 @@ services:
       SMTP_PORT: 587
       SMTP_USER: ${SMTP_USER}
       SMTP_PASS: ${SMTP_PASS}
-      EMAIL_FROM: Convention Tickets <${SMTP_USER}>
+      EMAIL_FROM: Chicago Drum Show <${SMTP_USER}>
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      SHOPIFY_API_KEY: ${SHOPIFY_API_KEY}
       FRONTEND_URL: http://localhost:49192
     ports:
       - "49191:3000"
