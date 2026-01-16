@@ -133,11 +133,11 @@ router.get('/:uuid', checkLockdown, async (req, res) => {
         });
       }
       
-      // Record the scan with server time UTC
+      // Record the scan with server time UTC and scanner user
       const todayUTC = getServerDateUTC();
       await db.query(
-        'INSERT INTO ticket_scans (ticket_id, scan_date) VALUES ($1, $2)',
-        [ticket.id, todayUTC]
+        'INSERT INTO ticket_scans (ticket_id, scan_date, scanned_by_user_id) VALUES ($1, $2, $3)',
+        [ticket.id, todayUTC, req.user.id]
       );
       
       return res.json({

@@ -23,9 +23,12 @@ router.get('/', authMiddleware, async (req, res) => {
       'SELECT ticket_id, supply_name, quantity FROM ticket_supplies'
     );
     
-    // Get all scans for all tickets
+    // Get all scans for all tickets with scanner user info
     const scansResult = await db.query(
-      'SELECT ticket_id, scan_date FROM ticket_scans'
+      `SELECT ts.ticket_id, ts.scan_date, ts.scanned_by_user_id,
+              u.email as scanned_by_email, u.name as scanned_by_name
+       FROM ticket_scans ts
+       LEFT JOIN users u ON ts.scanned_by_user_id = u.id`
     );
     
     // Map supplies and scans to tickets
@@ -38,7 +41,12 @@ router.get('/', authMiddleware, async (req, res) => {
       const ticketScans = scansResult.rows.filter(s => s.ticket_id === ticket.id);
       const scans = {
         scanned: ticketScans.length > 0,
-        scannedOn: ticketScans.length > 0 ? ticketScans[0].scan_date : null
+        scannedOn: ticketScans.length > 0 ? ticketScans[0].scan_date : null,
+        scannedBy: ticketScans.length > 0 ? {
+          userId: ticketScans[0].scanned_by_user_id,
+          email: ticketScans[0].scanned_by_email,
+          name: ticketScans[0].scanned_by_name
+        } : null
       };
       
       return {
@@ -283,6 +291,142 @@ router.patch('/:id/status', authMiddleware, async (req, res) => {
     });
   } catch (error) {
     console.error('Error updating ticket status:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Edit ticket values (SuperAdmin only)
+router.put('/:id', authMiddleware, superAdminMiddleware, checkLockdown, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, email, teacher_name, ticket_subtype } = req.body;
+
+    // Validate required fields
+    if (!name || !email) {
+      return res.status(400).json({ error: 'Name and email are required' });
+    }
+
+    // Get current ticket to check type
+    const ticketResult = await db.query(
+      'SELECT ticket_type FROM tickets WHERE id = $1',
+      [id]
+    );
+
+    if (ticketResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Ticket not found' });
+    }
+
+    const ticket = ticketResult.rows[0];
+
+    // Validate ticket_subtype for attendee tickets
+    if (ticket.ticket_type === 'attendee' && ticket_subtype) {
+      const validSubtypes = ['friday-only', 'saturday-only', 'weekend-pass'];
+      if (!validSubtypes.includes(ticket_subtype)) {
+        return res.status(400).json({ error: 'Invalid ticket_subtype' });
+      }
+    }
+
+    // Update ticket
+    const updateResult = await db.query(
+      `UPDATE tickets 
+       SET name = $1, email = $2, teacher_name = $3, ticket_subtype = $4, updated_at = NOW()
+       WHERE id = $5
+       RETURNING *`,
+      [name, email, teacher_name || null, ticket_subtype || null, id]
+    );
+
+    console.log(`✏️  Ticket ${id} edited by ${req.user.email}`);
+
+    res.json({
+      message: 'Ticket updated successfully',
+      ticket: updateResult.rows[0]
+    });
+  } catch (error) {
+    console.error('Error updating ticket:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Toggle scan status (SuperAdmin only)
+router.post('/:id/scan-status', authMiddleware, superAdminMiddleware, checkLockdown, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { action } = req.body;
+
+    if (!action || !['mark', 'unmark'].includes(action)) {
+      return res.status(400).json({ error: 'Action must be "mark" or "unmark"' });
+    }
+
+    // Check if ticket exists
+    const ticketResult = await db.query(
+      'SELECT id FROM tickets WHERE id = $1',
+      [id]
+    );
+
+    if (ticketResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Ticket not found' });
+    }
+
+    if (action === 'mark') {
+      // Check if already scanned
+      const scanCheck = await db.query(
+        'SELECT id FROM ticket_scans WHERE ticket_id = $1',
+        [id]
+      );
+
+      if (scanCheck.rows.length > 0) {
+        return res.status(400).json({ error: 'Ticket is already marked as scanned' });
+      }
+
+      // Mark as scanned
+      await db.query(
+        'INSERT INTO ticket_scans (ticket_id, scan_date, scanned_by_user_id) VALUES ($1, NOW(), $2)',
+        [id, req.user.id]
+      );
+
+      console.log(`✅ Ticket ${id} manually marked as scanned by ${req.user.email}`);
+
+      // Get scan date and scanner info
+      const scanResult = await db.query(
+        `SELECT ts.scan_date, ts.scanned_by_user_id,
+                u.email as scanned_by_email, u.name as scanned_by_name
+         FROM ticket_scans ts
+         LEFT JOIN users u ON ts.scanned_by_user_id = u.id
+         WHERE ts.ticket_id = $1`,
+        [id]
+      );
+
+      res.json({
+        message: 'Ticket marked as scanned',
+        scanned: true,
+        scannedOn: scanResult.rows[0].scan_date,
+        scannedBy: {
+          userId: scanResult.rows[0].scanned_by_user_id,
+          email: scanResult.rows[0].scanned_by_email,
+          name: scanResult.rows[0].scanned_by_name
+        }
+      });
+    } else {
+      // Unmark as scanned
+      const deleteResult = await db.query(
+        'DELETE FROM ticket_scans WHERE ticket_id = $1',
+        [id]
+      );
+
+      if (deleteResult.rowCount === 0) {
+        return res.status(400).json({ error: 'Ticket was not scanned' });
+      }
+
+      console.log(`❌ Ticket ${id} manually unmarked as scanned by ${req.user.email}`);
+
+      res.json({
+        message: 'Ticket unmarked as scanned',
+        scanned: false,
+        scannedOn: null
+      });
+    }
+  } catch (error) {
+    console.error('Error toggling scan status:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

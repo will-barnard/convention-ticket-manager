@@ -52,6 +52,16 @@
           </button>
         </div>
 
+        <div class="search-bar">
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="Search by name, email, teacher, or order ID..."
+            class="search-input"
+          />
+          <font-awesome-icon icon="search" class="search-icon" />
+        </div>
+
         <div class="actions-bar">
           <button @click="goToAddTicket" class="btn-primary">
             + Add New Ticket
@@ -90,6 +100,9 @@
                     <span v-if="ticket.scans?.scanned" class="scanned">
                       <font-awesome-icon icon="check-circle" class="check-icon" />
                       Scanned {{ formatScanDate(ticket.scans.scannedOn) }}
+                      <span v-if="ticket.scans.scannedBy" class="scanner-info">
+                        by {{ ticket.scans.scannedBy.name || ticket.scans.scannedBy.email }}
+                      </span>
                     </span>
                     <span v-else class="not-scanned">Not Scanned</span>
                   </div>
@@ -114,13 +127,81 @@
                 </td>
                 <td>{{ formatDate(ticket.created_at) }}</td>
                 <td>
-                  <button @click="deleteTicket(ticket.id)" class="btn-delete">
-                    Delete
-                  </button>
+                  <div class="actions-cell">
+                    <button 
+                      v-if="authStore.user?.role === 'superadmin'" 
+                      @click="openEditModal(ticket)" 
+                      class="btn-edit"
+                      title="Edit Ticket"
+                    >
+                      Edit
+                    </button>
+                    <button 
+                      v-if="authStore.user?.role === 'superadmin' && ticket.ticket_type === 'attendee'" 
+                      @click="toggleScanStatus(ticket)" 
+                      :class="['btn-scan', { scanned: ticket.scans?.scanned }]"
+                      :title="ticket.scans?.scanned ? 'Mark as Not Scanned' : 'Mark as Scanned'"
+                    >
+                      {{ ticket.scans?.scanned ? 'Unmark Scan' : 'Mark Scanned' }}
+                    </button>
+                    <button @click="deleteTicket(ticket.id)" class="btn-delete">
+                      Delete
+                    </button>
+                  </div>
                 </td>
               </tr>
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Ticket Modal -->
+    <div v-if="editingTicket" class="modal-overlay" @click="closeEditModal">
+      <div class="modal-content" @click.stop>
+        <div class="modal-header">
+          <h2>Edit Ticket</h2>
+          <button @click="closeEditModal" class="btn-close">×</button>
+        </div>
+        <div class="modal-body">
+          <form @submit.prevent="saveTicketEdits">
+            <div class="form-group">
+              <label>Name</label>
+              <input type="text" v-model="editForm.name" required />
+            </div>
+            
+            <div class="form-group">
+              <label>Email</label>
+              <input type="email" v-model="editForm.email" required />
+            </div>
+            
+            <div v-if="editForm.ticket_type === 'student'" class="form-group">
+              <label>Teacher Name</label>
+              <input type="text" v-model="editForm.teacher_name" />
+            </div>
+            
+            <div v-if="editForm.ticket_type === 'attendee'" class="form-group">
+              <label>Ticket Subtype</label>
+              <select v-model="editForm.ticket_subtype" required>
+                <option value="vip">VIP Pass</option>
+                <option value="adult_2day">Adult 2-Day Pass</option>
+                <option value="adult_saturday">Adult Saturday Pass</option>
+                <option value="adult_sunday">Adult Sunday Pass</option>
+                <option value="child_2day">Child 2-Day Pass</option>
+                <option value="child_saturday">Child Saturday Pass</option>
+                <option value="child_sunday">Child Sunday Pass</option>
+              </select>
+            </div>
+            
+            <div class="form-actions">
+              <button type="button" @click="closeEditModal" class="btn-secondary">
+                Cancel
+              </button>
+              <button type="submit" class="btn-primary" :disabled="saving">
+                {{ saving ? 'Saving...' : 'Save Changes' }}
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     </div>
@@ -150,6 +231,16 @@ export default {
     const error = ref('');
     const isChangePasswordOpen = ref(false);
     const filterType = ref('student');
+    const searchQuery = ref('');
+    const editingTicket = ref(null);
+    const saving = ref(false);
+    const editForm = ref({
+      name: '',
+      email: '',
+      teacher_name: '',
+      ticket_type: '',
+      ticket_subtype: ''
+    });
 
     const studentTickets = computed(() => 
       tickets.value.filter(t => t.ticket_type === 'student').length
@@ -164,7 +255,22 @@ export default {
     );
 
     const filteredTickets = computed(() => {
-      return tickets.value.filter(t => t.ticket_type === filterType.value);
+      let filtered = tickets.value.filter(t => t.ticket_type === filterType.value);
+      
+      if (searchQuery.value.trim()) {
+        const query = searchQuery.value.toLowerCase().trim();
+        filtered = filtered.filter(ticket => {
+          return (
+            ticket.name?.toLowerCase().includes(query) ||
+            ticket.email?.toLowerCase().includes(query) ||
+            ticket.teacher_name?.toLowerCase().includes(query) ||
+            ticket.shopify_order_id?.toLowerCase().includes(query) ||
+            ticket.uuid?.toLowerCase().includes(query)
+          );
+        });
+      }
+      
+      return filtered;
     });
 
     const loadTickets = async () => {
@@ -238,6 +344,73 @@ export default {
       router.push('/add-ticket');
     };
 
+    const openEditModal = (ticket) => {
+      editingTicket.value = ticket;
+      editForm.value = {
+        name: ticket.name,
+        email: ticket.email,
+        teacher_name: ticket.teacher_name || '',
+        ticket_type: ticket.ticket_type,
+        ticket_subtype: ticket.ticket_subtype || ''
+      };
+    };
+
+    const closeEditModal = () => {
+      editingTicket.value = null;
+      editForm.value = {
+        name: '',
+        email: '',
+        teacher_name: '',
+        ticket_type: '',
+        ticket_subtype: ''
+      };
+    };
+
+    const saveTicketEdits = async () => {
+      saving.value = true;
+      
+      try {
+        await axios.put(`/api/tickets/${editingTicket.value.id}`, editForm.value);
+        
+        // Update local ticket data
+        const ticket = tickets.value.find(t => t.id === editingTicket.value.id);
+        if (ticket) {
+          ticket.name = editForm.value.name;
+          ticket.email = editForm.value.email;
+          ticket.teacher_name = editForm.value.teacher_name;
+          ticket.ticket_subtype = editForm.value.ticket_subtype;
+        }
+        
+        closeEditModal();
+      } catch (err) {
+        console.error('Error updating ticket:', err);
+        alert('Failed to update ticket. Please try again.');
+      } finally {
+        saving.value = false;
+      }
+    };
+
+    const toggleScanStatus = async (ticket) => {
+      const action = ticket.scans?.scanned ? 'unmark' : 'mark';
+      const confirmMsg = ticket.scans?.scanned 
+        ? 'Mark this ticket as NOT scanned? This will remove the scan record.'
+        : 'Mark this ticket as scanned? This will add a scan record with the current timestamp.';
+      
+      if (!confirm(confirmMsg)) {
+        return;
+      }
+      
+      try {
+        await axios.post(`/api/tickets/${ticket.id}/scan-status`, { action });
+        
+        // Reload tickets to get updated scan status
+        await loadTickets();
+      } catch (err) {
+        console.error('Error toggling scan status:', err);
+        alert('Failed to update scan status. Please try again.');
+      }
+    };
+
     const showChangePassword = () => {
       isChangePasswordOpen.value = true;
     };
@@ -259,6 +432,10 @@ export default {
       error,
       isChangePasswordOpen,
       filterType,
+      searchQuery,
+      editingTicket,
+      editForm,
+      saving,
       studentTickets,
       exhibitorTickets,
       attendeeTickets,
@@ -266,6 +443,10 @@ export default {
       loadTickets,
       deleteTicket,
       updateTicketStatus,
+      openEditModal,
+      closeEditModal,
+      saveTicketEdits,
+      toggleScanStatus,
       formatDate,
       formatTicketType,
       formatScanDate,
@@ -343,6 +524,35 @@ export default {
   align-items: center;
   gap: 10px;
   margin-bottom: -3px;
+}
+
+.search-bar {
+  position: relative;
+  margin-bottom: 1.5rem;
+}
+
+.search-input {
+  width: 100%;
+  padding: 12px 40px 12px 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 15px;
+  transition: all 0.2s;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.search-icon {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #999;
+  pointer-events: none;
 }
 
 .type-tab:hover {
@@ -428,6 +638,51 @@ tr:hover td {
   color: #757575;
 }
 
+.actions-cell {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-edit {
+  background: #667eea;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.2s;
+}
+
+.btn-edit:hover {
+  background: #5568d3;
+}
+
+.btn-scan {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.2s;
+}
+
+.btn-scan:hover {
+  background: #218838;
+}
+
+.btn-scan.scanned {
+  background: #ffc107;
+  color: #333;
+}
+
+.btn-scan.scanned:hover {
+  background: #e0a800;
+}
+
 .btn-delete {
   background: #f44336;
   color: white;
@@ -449,6 +704,19 @@ tr:hover td {
 
 .scan-status .scanned {
   color: #2e7d32;
+  font-weight: 500;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.scanner-info {
+  font-size: 11px;
+  color: #666;
+  font-weight: 400;
+  font-style: italic;
+}
   font-weight: 500;
   display: flex;
   align-items: center;
@@ -556,6 +824,104 @@ tr:hover td {
 
 .status-select:hover {
   opacity: 0.8;
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 2rem;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 12px;
+  max-width: 600px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: #333;
+}
+
+.btn-close {
+  background: none;
+  border: none;
+  font-size: 2rem;
+  color: #999;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.btn-close:hover {
+  background: #f5f5f5;
+  color: #333;
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: #555;
+}
+
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.form-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  margin-top: 2rem;
 }
 
 @media (max-width: 768px) {

@@ -6,9 +6,10 @@ import {
   faBuilding, 
   faCalendarDay, 
   faCheck, 
-  faStar 
+  faStar,
+  faSearch
 } from '@fortawesome/free-solid-svg-icons';
 
-library.add(faTicket, faGraduationCap, faBuilding, faCalendarDay, faCheck, faStar);
+library.add(faTicket, faGraduationCap, faBuilding, faCalendarDay, faCheck, faStar, faSearch);
 
 export { FontAwesomeIcon };
