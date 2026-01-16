@@ -350,6 +350,196 @@ router.post('/create-ticket', validateShopifyHmac, checkLockdown, async (req, re
   }
 });
 
+// POST endpoint for Shopify order refunds
+router.post('/refund', validateShopifyHmac, async (req, res) => {
+  let webhookLogId = null;
+  
+  console.log('==================== SHOPIFY REFUND WEBHOOK ====================');
+  console.log('Body:', JSON.stringify(req.body, null, 2));
+  console.log('================================================================');
+  
+  const { id: order_id, refunds } = req.body;
+  
+  try {
+    // Log webhook
+    const logResult = await db.query(
+      `INSERT INTO webhook_logs (shopify_order_id, webhook_data, processed, created_at) 
+       VALUES ($1, $2, FALSE, NOW()) 
+       RETURNING id`,
+      [order_id ? String(order_id) : null, JSON.stringify(req.body)]
+    );
+    webhookLogId = logResult.rows[0].id;
+    
+    // Check if order has tickets in our system
+    const ticketsResult = await db.query(
+      'SELECT id, uuid, name, email FROM tickets WHERE shopify_order_id = $1',
+      [String(order_id)]
+    );
+    
+    if (ticketsResult.rows.length === 0) {
+      console.log(`⚠️  No tickets found for order ${order_id}`);
+      
+      await db.query(
+        `UPDATE webhook_logs 
+         SET processed = TRUE, 
+             processed_at = NOW(), 
+             error_message = $1
+         WHERE id = $2`,
+        ['No tickets found for this order', webhookLogId]
+      );
+      
+      return res.status(200).json({ 
+        message: 'No tickets found for this order',
+        order_id 
+      });
+    }
+    
+    // Update all tickets for this order to refunded status
+    await db.query(
+      'UPDATE tickets SET status = $1 WHERE shopify_order_id = $2',
+      ['refunded', String(order_id)]
+    );
+    
+    console.log(`✅ Marked ${ticketsResult.rows.length} ticket(s) as refunded for order ${order_id}`);
+    
+    // Send admin notification
+    const ticketList = ticketsResult.rows.map(t => 
+      `- ${t.name} (${t.email}) - UUID: ${t.uuid}`
+    ).join('\n');
+    
+    await sendAdminNotification({
+      subject: `Order Refunded - ${ticketsResult.rows.length} Ticket(s) Invalidated`,
+      message: `Order #${order_id} has been refunded.`,
+      ticketDetails: `The following tickets have been marked as refunded:\n\n${ticketList}\n\nRefund Details:\n${JSON.stringify(refunds, null, 2)}`
+    });
+    
+    // Mark webhook as processed
+    await db.query(
+      `UPDATE webhook_logs 
+       SET processed = TRUE, 
+           processed_at = NOW(), 
+           tickets_created = $1
+       WHERE id = $2`,
+      [ticketsResult.rows.length, webhookLogId]
+    );
+    
+    res.status(200).json({
+      success: true,
+      message: `Marked ${ticketsResult.rows.length} ticket(s) as refunded`,
+      tickets_updated: ticketsResult.rows.length
+    });
+    
+  } catch (error) {
+    console.error('Error processing refund webhook:', error);
+    
+    if (webhookLogId) {
+      await db.query(
+        `UPDATE webhook_logs 
+         SET error_message = $1 
+         WHERE id = $2`,
+        [error.message || 'Unknown error processing refund webhook', webhookLogId]
+      );
+    }
+    
+    res.status(500).json({ error: 'Failed to process refund' });
+  }
+});
+
+// POST endpoint for Shopify disputes/chargebacks
+router.post('/chargeback', validateShopifyHmac, async (req, res) => {
+  let webhookLogId = null;
+  
+  console.log('==================== SHOPIFY CHARGEBACK WEBHOOK ====================');
+  console.log('Body:', JSON.stringify(req.body, null, 2));
+  console.log('====================================================================');
+  
+  const { id: dispute_id, order_id } = req.body;
+  
+  try {
+    // Log webhook
+    const logResult = await db.query(
+      `INSERT INTO webhook_logs (shopify_order_id, webhook_data, processed, created_at) 
+       VALUES ($1, $2, FALSE, NOW()) 
+       RETURNING id`,
+      [order_id ? String(order_id) : null, JSON.stringify(req.body)]
+    );
+    webhookLogId = logResult.rows[0].id;
+    
+    // Check if order has tickets in our system
+    const ticketsResult = await db.query(
+      'SELECT id, uuid, name, email FROM tickets WHERE shopify_order_id = $1',
+      [String(order_id)]
+    );
+    
+    if (ticketsResult.rows.length === 0) {
+      console.log(`⚠️  No tickets found for order ${order_id}`);
+      
+      await db.query(
+        `UPDATE webhook_logs 
+         SET processed = TRUE, 
+             processed_at = NOW(), 
+             error_message = $1
+         WHERE id = $2`,
+        ['No tickets found for this order', webhookLogId]
+      );
+      
+      return res.status(200).json({ 
+        message: 'No tickets found for this order',
+        order_id 
+      });
+    }
+    
+    // Update all tickets for this order to chargeback status
+    await db.query(
+      'UPDATE tickets SET status = $1 WHERE shopify_order_id = $2',
+      ['chargeback', String(order_id)]
+    );
+    
+    console.log(`⚠️  Marked ${ticketsResult.rows.length} ticket(s) as chargeback for order ${order_id}`);
+    
+    // Send admin notification
+    const ticketList = ticketsResult.rows.map(t => 
+      `- ${t.name} (${t.email}) - UUID: ${t.uuid}`
+    ).join('\n');
+    
+    await sendAdminNotification({
+      subject: `⚠️ CHARGEBACK ALERT - ${ticketsResult.rows.length} Ticket(s) Invalidated`,
+      message: `A chargeback/dispute has been filed for Order #${order_id}.`,
+      ticketDetails: `The following tickets have been marked as chargeback:\n\n${ticketList}\n\nDispute ID: ${dispute_id}\n\nPlease review this case immediately.`
+    });
+    
+    // Mark webhook as processed
+    await db.query(
+      `UPDATE webhook_logs 
+       SET processed = TRUE, 
+           processed_at = NOW(), 
+           tickets_created = $1
+       WHERE id = $2`,
+      [ticketsResult.rows.length, webhookLogId]
+    );
+    
+    res.status(200).json({
+      success: true,
+      message: `Marked ${ticketsResult.rows.length} ticket(s) as chargeback`,
+      tickets_updated: ticketsResult.rows.length
+    });
+    
+  } catch (error) {
+    console.error('Error processing chargeback webhook:', error);
+    
+    if (webhookLogId) {
+      await db.query(
+        `UPDATE webhook_logs 
+         SET error_message = $1 
+         WHERE id = $2`,
+        [error.message || 'Unknown error processing chargeback webhook', webhookLogId]
+      );
+    }
+    
+    res.status(500).json({ error: 'Failed to process chargeback' });
+  }
+});
+
 // Health check endpoint (doesn't require API key)
 router.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'shopify-integration' });
