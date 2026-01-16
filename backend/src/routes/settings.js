@@ -53,7 +53,8 @@ router.get('/', async (req, res) => {
         friday_date: null,
         saturday_date: null,
         sunday_date: null,
-        auto_send_emails: true
+        auto_send_emails: true,
+        lockdown_mode: false
       });
     }
     res.json(result.rows[0]);
@@ -193,6 +194,31 @@ router.put('/receive-mode', superAdminMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Error toggling receive mode:', error);
     res.status(500).json({ error: 'Failed to toggle receive mode' });
+  }
+});
+
+// Toggle lockdown mode (SuperAdmin only)
+router.put('/lockdown-mode', superAdminMiddleware, async (req, res) => {
+  try {
+    const { enabled } = req.body;
+    
+    // Get current settings
+    const checkResult = await db.query('SELECT * FROM settings LIMIT 1');
+    
+    if (checkResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Settings not found' });
+    }
+    
+    const result = await db.query(
+      'UPDATE settings SET lockdown_mode = $1, updated_at = NOW() WHERE id = $2 RETURNING lockdown_mode',
+      [enabled, checkResult.rows[0].id]
+    );
+    
+    console.log(`🔒 Lockdown mode ${enabled ? 'ENABLED - Database is now READ-ONLY' : 'DISABLED - Normal operations resumed'}`);
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error toggling lockdown mode:', error);
+    res.status(500).json({ error: 'Failed to toggle lockdown mode' });
   }
 });
 

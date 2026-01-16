@@ -10,6 +10,7 @@
         <router-link to="/tickets" class="nav-tab" active-class="active">Tickets</router-link>
         <router-link to="/stats" class="nav-tab" active-class="active">Stats</router-link>
         <router-link to="/settings" class="nav-tab" active-class="active">Settings</router-link>
+        <router-link v-if="authStore.user?.role === 'superadmin'" to="/users" class="nav-tab" active-class="active">Users</router-link>
       </nav>
 
       <div class="settings-card">
@@ -190,12 +191,33 @@
         <p class="hint danger-hint">⚠️ These actions are irreversible and should be used with extreme caution</p>
         
         <div class="superadmin-actions">
+          <div class="action-item lockdown-item">
+            <div class="action-info">
+              <h3>🔐 Lockdown Mode</h3>
+              <p>{{ lockdownEnabled ? 'Database is currently LOCKED. All ticket creation and scanning is disabled.' : 'Enable lockdown mode to freeze all ticket creation and scanning operations. Database becomes read-only.' }}</p>
+            </div>
+            <div class="lockdown-toggle">
+              <label class="toggle-switch">
+                <input 
+                  type="checkbox" 
+                  v-model="lockdownEnabled" 
+                  @change="toggleLockdown"
+                  :disabled="togglingLockdown"
+                />
+                <span class="slider"></span>
+              </label>
+              <span class="toggle-status" :class="{ active: lockdownEnabled }">
+                {{ lockdownEnabled ? '🔒 LOCKED' : '🔓 Unlocked' }}
+              </span>
+            </div>
+          </div>
+          
           <div class="action-item">
             <div class="action-info">
               <h3>Reset Database</h3>
               <p>Delete all tickets, scans, and supplies from the database. User accounts will NOT be affected.</p>
             </div>
-            <button @click="confirmResetDatabase" class="btn-danger" :disabled="resetting">
+            <button @click="confirmResetDatabase" class="btn-danger" :disabled="resetting || lockdownEnabled">
               {{ resetting ? 'Resetting...' : 'Reset Database' }}
             </button>
           </div>
@@ -203,6 +225,9 @@
         
         <div v-if="resetMessage" :class="['action-message', resetMessageType]">
           {{ resetMessage }}
+        </div>
+        <div v-if="lockdownMessage" :class="['action-message', lockdownMessageType]">
+          {{ lockdownMessage }}
         </div>
       </div>
       
@@ -355,6 +380,12 @@ export default {
     const resetMessage = ref('');
     const resetMessageType = ref('');
     
+    // Lockdown mode refs
+    const lockdownEnabled = ref(false);
+    const togglingLockdown = ref(false);
+    const lockdownMessage = ref('');
+    const lockdownMessageType = ref('');
+    
     // Migration refs
     const receiveModeEnabled = ref(false);
     const receiveModeSecret = ref('');
@@ -386,6 +417,9 @@ export default {
         // Load receive mode settings
         receiveModeEnabled.value = data.receive_mode_enabled || false;
         receiveModeSecret.value = data.receive_mode_secret || '';
+        
+        // Load lockdown mode setting
+        lockdownEnabled.value = data.lockdown_mode || false;
       } catch (error) {
         console.error('Error fetching settings:', error);
       }
@@ -722,7 +756,36 @@ export default {
         resetting.value = false;
       }
     };
-    
+
+    // Lockdown mode functions
+    const toggleLockdown = async () => {
+      togglingLockdown.value = true;
+      lockdownMessage.value = '';
+      
+      try {
+        const response = await axios.put('/api/settings/lockdown-mode', {
+          enabled: lockdownEnabled.value
+        });
+        
+        lockdownMessage.value = lockdownEnabled.value 
+          ? '🔒 Lockdown mode ENABLED. All ticket creation and scanning is now disabled.'
+          : '🔓 Lockdown mode disabled. Normal operations resumed.';
+        lockdownMessageType.value = lockdownEnabled.value ? 'warning' : 'success';
+        
+        setTimeout(() => {
+          lockdownMessage.value = '';
+        }, 8000);
+      } catch (error) {
+        console.error('Error toggling lockdown mode:', error);
+        lockdownMessage.value = error.response?.data?.error || 'Failed to toggle lockdown mode';
+        lockdownMessageType.value = 'error';
+        // Revert toggle
+        lockdownEnabled.value = !lockdownEnabled.value;
+      } finally {
+        togglingLockdown.value = false;
+      }
+    };
+
     // Migration functions
     const toggleReceiveMode = async () => {
       togglingReceiveMode.value = true;
@@ -840,6 +903,10 @@ export default {
       resetting,
       resetMessage,
       resetMessageType,
+      lockdownEnabled,
+      togglingLockdown,
+      lockdownMessage,
+      lockdownMessageType,
       receiveModeEnabled,
       receiveModeSecret,
       togglingReceiveMode,
@@ -857,6 +924,7 @@ export default {
       downloadCSV,
       downloadPostConventionReport,
       confirmResetDatabase,
+      toggleLockdown,
       toggleReceiveMode,
       copySecret,
       confirmExportDatabase,
@@ -1234,6 +1302,94 @@ export default {
   gap: 10px;
 }
 
+.lockdown-item {
+  padding: 1rem;
+  border: 2px solid #ff9800;
+  border-radius: 8px;
+  background: #fff9f0;
+}
+
+.lockdown-toggle {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+/* Toggle Switch Styles */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 60px;
+  height: 34px;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: 0.4s;
+  border-radius: 34px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 26px;
+  width: 26px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: 0.4s;
+  border-radius: 50%;
+}
+
+.toggle-switch input:checked + .slider {
+  background-color: #ff4444;
+}
+
+.toggle-switch input:focus + .slider {
+  box-shadow: 0 0 1px #ff4444;
+}
+
+.toggle-switch input:checked + .slider:before {
+  transform: translateX(26px);
+}
+
+.toggle-switch input:disabled + .slider {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toggle-status {
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: #666;
+}
+
+.toggle-status.active {
+  color: #ff4444;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
 .btn-danger {
   background: #ff4444;
   color: white;
@@ -1279,6 +1435,13 @@ export default {
   background: #f8d7da;
   color: #721c24;
   border: 1px solid #f5c6cb;
+}
+
+.action-message.warning {
+  background: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeaa7;
+  font-size: 1rem;
 }
 
 /* Migration Section Styles */

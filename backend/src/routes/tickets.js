@@ -5,6 +5,7 @@ const QRCode = require('qrcode');
 const db = require('../config/database');
 const authMiddleware = require('../middleware/auth');
 const superAdminMiddleware = require('../middleware/superadmin');
+const checkLockdown = require('../middleware/lockdown');
 const emailService = require('../services/email');
 
 const router = express.Router();
@@ -60,6 +61,7 @@ router.get('/', authMiddleware, async (req, res) => {
 // Create and send ticket (protected)
 router.post('/',
   authMiddleware,
+  checkLockdown,
   body('ticketType').isIn(['student', 'exhibitor', 'attendee']),
   body('ticketSubtype').optional().trim(),
   body('name').trim().notEmpty(),
@@ -235,7 +237,7 @@ router.delete('/reset-database', superAdminMiddleware, async (req, res) => {
 });
 
 // Delete ticket (protected)
-router.delete('/:id', authMiddleware, async (req, res) => {
+router.delete('/:id', authMiddleware, checkLockdown, async (req, res) => {
   try {
     const { id } = req.params;
     const result = await db.query('DELETE FROM tickets WHERE id = $1 RETURNING id', [id]);

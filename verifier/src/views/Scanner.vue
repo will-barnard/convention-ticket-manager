@@ -119,6 +119,7 @@ export default {
     const errorPopupMessage = ref('');
     const errorPopupIcon = ref('');
     const errorPopupType = ref('');
+    const isScanning = ref(false); // Lock to prevent multiple scans
 
     const startCamera = async () => {
       try {
@@ -253,6 +254,14 @@ export default {
     };
 
     const handleQRCode = async (data) => {
+      // Prevent multiple scans while processing
+      if (isScanning.value) {
+        console.log('Scan already in progress, ignoring QR code');
+        return;
+      }
+
+      isScanning.value = true;
+      
       // Trigger green flash animation
       scanFlash.value = true;
       setTimeout(() => {
@@ -311,22 +320,33 @@ export default {
           const result = err.response.data;
           console.log('Error response data:', result);
           
-          // Show popup for errors
+          // Show result overlay for already scanned and wrong date (require manual dismiss)
           if (result.status === 'already_used' || result.status === 'already_scanned_today' || result.status === 'already_scanned') {
-            console.log('Showing already scanned popup');
-            showErrorPopupNotification('⚠️', result.message || 'Already Scanned - Check Wristband', 'warning');
+            console.log('Showing already scanned result');
+            verificationResult.value = result.status;
+            ticketData.value = result;
+            resultClass.value = 'warning';
+            resultIcon.value = '⚠️';
+            resultTitle.value = 'Already Scanned';
+            resultMessage.value = result.message || 'Already Scanned - Check Wristband';
             return;
           } else if (result.status === 'wrong_date') {
-            console.log('Showing wrong date popup');
-            showErrorPopupNotification('✕', result.message || 'Wrong Date - Not Valid Today', 'error');
+            console.log('Showing wrong date result');
+            verificationResult.value = result.status;
+            ticketData.value = result;
+            resultClass.value = 'error';
+            resultIcon.value = '✕';
+            resultTitle.value = 'Wrong Date';
+            resultMessage.value = result.message || 'Wrong Date - Not Valid Today';
             return;
           } else if (result.status === 'invalid') {
+            // Invalid tickets use auto-dismiss popup
             showErrorPopupNotification('✕', result.message || 'Invalid Ticket', 'error');
             return;
           }
         }
         
-        // Generic error
+        // Generic error - auto-dismiss popup
         showErrorPopupNotification('✕', 'Failed to Verify Ticket', 'error');
       }
     };
@@ -344,6 +364,7 @@ export default {
       setTimeout(() => {
         console.log('Hiding error popup and resuming scan');
         showErrorPopup.value = false;
+        isScanning.value = false; // Release scanning lock
         // Resume scanning after popup closes
         if (cameraActive.value && !verificationResult.value) {
           scanQRCode();
@@ -359,6 +380,7 @@ export default {
       resultTitle.value = '';
       resultMessage.value = '';
       scanFlash.value = false;
+      isScanning.value = false; // Release scanning lock
       
       // Resume scanning
       if (cameraActive.value) {

@@ -7,6 +7,7 @@ import AddTicket from '@/views/AddTicket.vue';
 import VerifyTicket from '@/views/VerifyTicket.vue';
 import Stats from '@/views/Stats.vue';
 import Settings from '@/views/Settings.vue';
+import UserManagement from '@/views/UserManagement.vue';
 
 const routes = [
   {
@@ -45,6 +46,12 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/users',
+    name: 'UserManagement',
+    component: UserManagement,
+    meta: { requiresAuth: true, requiresSuperAdmin: true },
+  },
+  {
     path: '/verify/:uuid',
     name: 'VerifyTicket',
     component: VerifyTicket,
@@ -62,6 +69,8 @@ router.beforeEach((to, from, next) => {
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next('/login');
   } else if (to.path === '/login' && authStore.isAuthenticated) {
+    next('/');
+  } else if (to.meta.requiresSuperAdmin && authStore.user?.role !== 'superadmin') {
     next('/');
   } else {
     next();

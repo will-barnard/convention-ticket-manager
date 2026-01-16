@@ -1,5 +1,6 @@
 const express = require('express');
 const db = require('../config/database');
+const checkLockdown = require('../middleware/lockdown');
 
 const router = express.Router();
 
@@ -64,7 +65,7 @@ async function checkDateValidity(allowedDays) {
 }
 
 // Verify ticket by UUID (public endpoint)
-router.get('/:uuid', async (req, res) => {
+router.get('/:uuid', checkLockdown, async (req, res) => {
   try {
     const { uuid } = req.params;
 
@@ -97,8 +98,23 @@ router.get('/:uuid', async (req, res) => {
       });
     }
 
-    // For attendee tickets, check if already scanned (once only, then wristband)
+    // For attendee tickets, validate date and check if already scanned
     if (ticket.ticket_type === 'attendee') {
+      // First, check if today is an allowed day for this ticket
+      const allowedDays = getAllowedDays(ticket.ticket_subtype);
+      const dateCheck = await checkDateValidity(allowedDays);
+      
+      if (!dateCheck.valid) {
+        return res.status(400).json({
+          status: 'wrong_date',
+          message: dateCheck.message,
+          allowedDays: dateCheck.allowedDays,
+          ticketType: ticket.ticket_type,
+          ticketSubtype: ticket.ticket_subtype,
+          name: ticket.name,
+        });
+      }
+      
       // Check if ticket has already been scanned (ever)
       const scanCheckResult = await db.query(
         'SELECT id, scan_date FROM ticket_scans WHERE ticket_id = $1 LIMIT 1',

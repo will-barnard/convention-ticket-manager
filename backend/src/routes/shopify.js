@@ -5,6 +5,7 @@ const { sendTicketEmail, sendAdminNotification } = require('../services/email');
 const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
 const crypto = require('crypto');
+const checkLockdown = require('../middleware/lockdown');
 
 // Middleware to validate Shopify HMAC signature
 const validateShopifyHmac = (req, res, next) => {
@@ -43,7 +44,7 @@ const validateShopifyHmac = (req, res, next) => {
 };
 
 // POST endpoint for Shopify to create attendee tickets
-router.post('/create-ticket', validateShopifyHmac, async (req, res) => {
+router.post('/create-ticket', validateShopifyHmac, checkLockdown, async (req, res) => {
   // DEBUG: Log incoming request details
   console.log('==================== SHOPIFY WEBHOOK REQUEST ====================');
   console.log('Headers:', JSON.stringify(req.headers, null, 2));
