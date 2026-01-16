@@ -165,7 +165,7 @@ export default {
     const router = useRouter();
 
     const formData = reactive({
-      ticketType: 'student',
+      ticketType: 'attendee',
       ticketSubtype: '',
       name: '',
       teacherName: '',

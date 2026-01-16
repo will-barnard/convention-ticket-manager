@@ -232,7 +232,7 @@ export default {
     const loading = ref(true);
     const error = ref('');
     const isChangePasswordOpen = ref(false);
-    const filterType = ref('student');
+    const filterType = ref('attendee');
     const searchQuery = ref('');
     const editingTicket = ref(null);
     const saving = ref(false);
