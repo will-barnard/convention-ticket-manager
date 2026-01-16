@@ -26,7 +26,7 @@ router.get('/', authMiddleware, async (req, res) => {
     // Get all scans for all tickets with scanner user info
     const scansResult = await db.query(
       `SELECT ts.ticket_id, ts.scan_date, ts.scanned_by_user_id,
-              u.email as scanned_by_email, u.name as scanned_by_name
+              u.username as scanned_by_username
        FROM ticket_scans ts
        LEFT JOIN users u ON ts.scanned_by_user_id = u.id`
     );
@@ -44,8 +44,7 @@ router.get('/', authMiddleware, async (req, res) => {
         scannedOn: ticketScans.length > 0 ? ticketScans[0].scan_date : null,
         scannedBy: ticketScans.length > 0 ? {
           userId: ticketScans[0].scanned_by_user_id,
-          email: ticketScans[0].scanned_by_email,
-          name: ticketScans[0].scanned_by_name
+          username: ticketScans[0].scanned_by_username
         } : null
       };
       
@@ -389,7 +388,7 @@ router.post('/:id/scan-status', authMiddleware, superAdminMiddleware, checkLockd
       // Get scan date and scanner info
       const scanResult = await db.query(
         `SELECT ts.scan_date, ts.scanned_by_user_id,
-                u.email as scanned_by_email, u.name as scanned_by_name
+                u.username as scanned_by_username
          FROM ticket_scans ts
          LEFT JOIN users u ON ts.scanned_by_user_id = u.id
          WHERE ts.ticket_id = $1`,
@@ -402,8 +401,7 @@ router.post('/:id/scan-status', authMiddleware, superAdminMiddleware, checkLockd
         scannedOn: scanResult.rows[0].scan_date,
         scannedBy: {
           userId: scanResult.rows[0].scanned_by_user_id,
-          email: scanResult.rows[0].scanned_by_email,
-          name: scanResult.rows[0].scanned_by_name
+          username: scanResult.rows[0].scanned_by_username
         }
       });
     } else {

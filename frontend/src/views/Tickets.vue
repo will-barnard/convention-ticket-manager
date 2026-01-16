@@ -102,7 +102,7 @@
                       <font-awesome-icon icon="check-circle" class="check-icon" />
                       Scanned {{ formatScanDate(ticket.scans.scannedOn) }}
                       <span v-if="ticket.scans.scannedBy" class="scanner-info">
-                        by {{ ticket.scans.scannedBy.name || ticket.scans.scannedBy.email }}
+                        by {{ ticket.scans.scannedBy.username }}
                       </span>
                     </span>
                     <span v-else class="not-scanned">Not Scanned</span>
