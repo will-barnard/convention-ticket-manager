@@ -64,6 +64,9 @@ docker exec -it convention-backend node src/migrations/add-lockdown-mode.js
 echo "   - Creating webhook logs table..."
 docker exec -it convention-backend node src/migrations/create-webhook-logs-table.js
 
+echo "   - Adding webhook type..."
+docker exec -it convention-backend node src/migrations/add-webhook-type.js
+
 echo "   - Adding scanner user to scans..."
 docker exec -it convention-backend node src/migrations/add-scanner-user-to-scans.js
 

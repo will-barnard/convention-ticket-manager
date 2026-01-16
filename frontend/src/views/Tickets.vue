@@ -123,6 +123,7 @@
                     <option value="valid">✓ Valid</option>
                     <option value="invalid">✗ Invalid</option>
                     <option value="refunded">↩ Refunded</option>
+                    <option value="cancelled">✖ Cancelled</option>
                     <option value="chargeback">⚠ Chargeback</option>
                   </select>
                 </td>
@@ -851,6 +852,12 @@ tr:hover td {
   background: #fff3cd;
   color: #856404;
   border-color: #ffeaa7;
+}
+
+.status-select.cancelled {
+  background: #e8e8e8;
+  color: #424242;
+  border-color: #bdbdbd;
 }
 
 .status-select.chargeback {

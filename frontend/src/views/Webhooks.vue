@@ -38,7 +38,7 @@
             <div class="stat-value">{{ stats.webhooks_with_errors || 0 }}</div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">Tickets Created</div>
+            <div class="stat-label">Tickets Affected</div>
             <div class="stat-value">{{ stats.total_tickets_created || 0 }}</div>
           </div>
         </div>
@@ -74,9 +74,9 @@
             <thead>
               <tr>
                 <th>Time</th>
-                <th>Customer Name</th>
+                <th>Type</th>
                 <th>Order ID</th>
-                <th>Tickets Created</th>
+                <th>Tickets Affected</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -84,7 +84,11 @@
             <tbody>
               <tr v-for="webhook in webhooks" :key="webhook.id">
                 <td>{{ formatDate(webhook.created_at) }}</td>
-                <td>{{ getCustomerName(webhook) }}</td>
+                <td>
+                  <span class="webhook-type-badge" :class="webhook.webhook_type || 'order_create'">
+                    {{ formatWebhookType(webhook.webhook_type) }}
+                  </span>
+                </td>
                 <td>{{ webhook.shopify_order_id || '-' }}</td>
                 <td>
                   <span class="ticket-count" :class="{ zero: webhook.tickets_created === 0 }">
@@ -123,6 +127,12 @@
           <div class="detail-row">
             <strong>Received:</strong>
             <span>{{ formatDateFull(selectedWebhook.created_at) }}</span>
+          </div>
+          <div class="detail-row">
+            <strong>Webhook Type:</strong>
+            <span class="webhook-type-badge" :class="selectedWebhook.webhook_type || 'order_create'">
+              {{ formatWebhookType(selectedWebhook.webhook_type) }}
+            </span>
           </div>
           <div class="detail-row">
             <strong>Shopify Order ID:</strong>
@@ -275,6 +285,16 @@ export default {
       return 'Pending';
     };
 
+    const formatWebhookType = (type) => {
+      const types = {
+        'order_create': '📦 Order Created',
+        'refund': '↩️ Refund',
+        'cancel': '✖️ Cancelled',
+        'chargeback': '⚠️ Chargeback'
+      };
+      return types[type] || '📦 Order';
+    };
+
     const formatJSON = (data) => {
       if (typeof data === 'string') {
         try {
@@ -326,6 +346,7 @@ export default {
       formatDateFull,
       getStatusClass,
       getStatusText,
+      formatWebhookType,
       formatJSON,
       showChangePassword,
       handleLogout,
@@ -520,6 +541,34 @@ export default {
 .status-badge.pending {
   background: #fff3cd;
   color: #856404;
+}
+
+.webhook-type-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.webhook-type-badge.order_create {
+  background: #d4edda;
+  color: #155724;
+}
+
+.webhook-type-badge.refund {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.webhook-type-badge.cancel {
+  background: #e8e8e8;
+  color: #424242;
+}
+
+.webhook-type-badge.chargeback {
+  background: #f8d7da;
+  color: #721c24;
 }
 
 .btn-view {

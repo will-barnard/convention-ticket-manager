@@ -69,10 +69,10 @@ router.post('/create-ticket', validateShopifyHmac, checkLockdown, async (req, re
     if (webhookLogId === null) {
       try {
         const logResult = await db.query(
-          `INSERT INTO webhook_logs (shopify_order_id, webhook_data, processed, error_message, created_at) 
-           VALUES ($1, $2, FALSE, $3, NOW()) 
+          `INSERT INTO webhook_logs (shopify_order_id, webhook_data, processed, error_message, webhook_type, created_at) 
+           VALUES ($1, $2, FALSE, $3, $4, NOW()) 
            RETURNING id`,
-          [order_id ? String(order_id) : null, JSON.stringify(req.body), 'Missing or invalid line_items array']
+          [order_id ? String(order_id) : null, JSON.stringify(req.body), 'Missing or invalid line_items array', 'order_create']
         );
         webhookLogId = logResult.rows[0].id;
       } catch (logErr) {
@@ -92,10 +92,10 @@ router.post('/create-ticket', validateShopifyHmac, checkLockdown, async (req, re
     if (webhookLogId === null) {
       try {
         const logResult = await db.query(
-          `INSERT INTO webhook_logs (shopify_order_id, webhook_data, processed, error_message, created_at) 
-           VALUES ($1, $2, FALSE, $3, NOW()) 
+          `INSERT INTO webhook_logs (shopify_order_id, webhook_data, processed, error_message, webhook_type, created_at) 
+           VALUES ($1, $2, FALSE, $3, $4, NOW()) 
            RETURNING id`,
-          [order_id ? String(order_id) : null, JSON.stringify(req.body), 'Missing customer information']
+          [order_id ? String(order_id) : null, JSON.stringify(req.body), 'Missing customer information', 'order_create']
         );
         webhookLogId = logResult.rows[0].id;
       } catch (logErr) {
@@ -115,10 +115,10 @@ router.post('/create-ticket', validateShopifyHmac, checkLockdown, async (req, re
   // Log webhook to database FIRST (before any processing)
   try {
     const webhookLogResult = await db.query(
-      `INSERT INTO webhook_logs (shopify_order_id, webhook_data, processed, created_at) 
-       VALUES ($1, $2, FALSE, NOW()) 
+      `INSERT INTO webhook_logs (shopify_order_id, webhook_data, processed, webhook_type, created_at) 
+       VALUES ($1, $2, FALSE, $3, NOW()) 
        RETURNING id`,
-      [shopify_order_id, JSON.stringify(req.body)]
+      [shopify_order_id, JSON.stringify(req.body), 'order_create']
     );
     webhookLogId = webhookLogResult.rows[0].id;
     console.log(`📝 Webhook logged with ID: ${webhookLogId}`);
@@ -345,10 +345,10 @@ router.post('/refund', validateShopifyHmac, async (req, res) => {
   try {
     // Log webhook
     const logResult = await db.query(
-      `INSERT INTO webhook_logs (shopify_order_id, webhook_data, processed, created_at) 
-       VALUES ($1, $2, FALSE, NOW()) 
+      `INSERT INTO webhook_logs (shopify_order_id, webhook_data, processed, webhook_type, created_at) 
+       VALUES ($1, $2, FALSE, $3, NOW()) 
        RETURNING id`,
-      [order_id ? String(order_id) : null, JSON.stringify(req.body)]
+      [order_id ? String(order_id) : null, JSON.stringify(req.body), 'refund']
     );
     webhookLogId = logResult.rows[0].id;
     
@@ -436,10 +436,10 @@ router.post('/chargeback', validateShopifyHmac, async (req, res) => {
   try {
     // Log webhook
     const logResult = await db.query(
-      `INSERT INTO webhook_logs (shopify_order_id, webhook_data, processed, created_at) 
-       VALUES ($1, $2, FALSE, NOW()) 
+      `INSERT INTO webhook_logs (shopify_order_id, webhook_data, processed, webhook_type, created_at) 
+       VALUES ($1, $2, FALSE, $3, NOW()) 
        RETURNING id`,
-      [order_id ? String(order_id) : null, JSON.stringify(req.body)]
+      [order_id ? String(order_id) : null, JSON.stringify(req.body), 'chargeback']
     );
     webhookLogId = logResult.rows[0].id;
     
@@ -515,6 +515,97 @@ router.post('/chargeback', validateShopifyHmac, async (req, res) => {
     }
     
     res.status(500).json({ error: 'Failed to process chargeback' });
+  }
+});
+
+// POST endpoint for Shopify order cancellations
+router.post('/cancel', validateShopifyHmac, async (req, res) => {
+  let webhookLogId = null;
+  
+  const { id: refund_id, order_id, refund_line_items } = req.body;
+  
+  try {
+    // Log webhook
+    const logResult = await db.query(
+      `INSERT INTO webhook_logs (shopify_order_id, webhook_data, processed, webhook_type, created_at) 
+       VALUES ($1, $2, FALSE, $3, NOW()) 
+       RETURNING id`,
+      [order_id ? String(order_id) : null, JSON.stringify(req.body), 'cancel']
+    );
+    webhookLogId = logResult.rows[0].id;
+    
+    // Check if order has tickets in our system
+    const ticketsResult = await db.query(
+      'SELECT id, uuid, name, email FROM tickets WHERE shopify_order_id = $1',
+      [String(order_id)]
+    );
+    
+    if (ticketsResult.rows.length === 0) {
+      console.log(`⚠️  No tickets found for order ${order_id}`);
+      
+      await db.query(
+        `UPDATE webhook_logs 
+         SET processed = TRUE, 
+             processed_at = NOW(), 
+             error_message = $1
+         WHERE id = $2`,
+        ['No tickets found for this order', webhookLogId]
+      );
+      
+      return res.status(200).json({ 
+        message: 'No tickets found for this order',
+        order_id 
+      });
+    }
+    
+    // Update all tickets for this order to cancelled status
+    await db.query(
+      'UPDATE tickets SET status = $1 WHERE shopify_order_id = $2',
+      ['cancelled', String(order_id)]
+    );
+    
+    console.log(`✅ Marked ${ticketsResult.rows.length} ticket(s) as cancelled for order ${order_id}`);
+    
+    // Send admin notification
+    const ticketList = ticketsResult.rows.map(t => 
+      `- ${t.name} (${t.email}) - UUID: ${t.uuid}`
+    ).join('\n');
+    
+    await sendAdminNotification({
+      subject: `Order Cancelled - ${ticketsResult.rows.length} Ticket(s) Invalidated`,
+      message: `Order #${order_id} has been cancelled.`,
+      ticketDetails: `The following tickets have been marked as cancelled:\n\n${ticketList}\n\nCancellation Details:\nRefund ID: ${refund_id}\nLine Items: ${refund_line_items?.length || 0}`
+    });
+    
+    // Mark webhook as processed
+    await db.query(
+      `UPDATE webhook_logs 
+       SET processed = TRUE, 
+           processed_at = NOW(), 
+           tickets_created = $1
+       WHERE id = $2`,
+      [ticketsResult.rows.length, webhookLogId]
+    );
+    
+    res.status(200).json({
+      success: true,
+      message: `Marked ${ticketsResult.rows.length} ticket(s) as cancelled`,
+      tickets_updated: ticketsResult.rows.length
+    });
+    
+  } catch (error) {
+    console.error('Error processing cancel webhook:', error);
+    
+    if (webhookLogId) {
+      await db.query(
+        `UPDATE webhook_logs 
+         SET error_message = $1 
+         WHERE id = $2`,
+        [error.message || 'Unknown error processing cancel webhook', webhookLogId]
+      );
+    }
+    
+    res.status(500).json({ error: 'Failed to process cancellation' });
   }
 });
 

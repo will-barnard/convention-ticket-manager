@@ -8,7 +8,7 @@ router.get('/', authMiddleware, async (req, res) => {
   try {
     const { processed, limit = 50, offset = 0 } = req.query;
     
-    let query = 'SELECT id, shopify_order_id, processed, created_at, processed_at, error_message, tickets_created FROM webhook_logs';
+    let query = 'SELECT id, shopify_order_id, processed, created_at, processed_at, error_message, tickets_created, webhook_type FROM webhook_logs';
     const params = [];
     
     // Filter by processed status if specified
