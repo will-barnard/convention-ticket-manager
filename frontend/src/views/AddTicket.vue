@@ -9,10 +9,10 @@
       <div class="ticket-type-tabs">
         <button
           type="button"
-          @click="formData.ticketType = 'student'; onTicketTypeChange()"
-          :class="['tab-btn', { active: formData.ticketType === 'student' }]"
+          @click="formData.ticketType = 'attendee'; onTicketTypeChange()"
+          :class="['tab-btn', { active: formData.ticketType === 'attendee' }]"
         >
-          <font-awesome-icon icon="graduation-cap" /> Student Ticket
+          <font-awesome-icon icon="ticket" /> Attendee Ticket
         </button>
         <button
           type="button"
@@ -23,10 +23,10 @@
         </button>
         <button
           type="button"
-          @click="formData.ticketType = 'attendee'; onTicketTypeChange()"
-          :class="['tab-btn', { active: formData.ticketType === 'attendee' }]"
+          @click="formData.ticketType = 'student'; onTicketTypeChange()"
+          :class="['tab-btn', { active: formData.ticketType === 'student' }]"
         >
-          <font-awesome-icon icon="ticket" /> Attendee Ticket
+          <font-awesome-icon icon="graduation-cap" /> Student Ticket
         </button>
       </div>
 

@@ -31,11 +31,11 @@
       <div v-else class="tickets-content">
         <div class="ticket-type-tabs">
           <button
-            @click="filterType = 'student'"
-            :class="['type-tab', { active: filterType === 'student' }]"
+            @click="filterType = 'attendee'"
+            :class="['type-tab', { active: filterType === 'attendee' }]"
           >
-            <font-awesome-icon icon="graduation-cap" />
-            Students ({{ studentTickets }})
+            <font-awesome-icon icon="calendar-day" />
+            Attendees ({{ attendeeTickets }})
           </button>
           <button
             @click="filterType = 'exhibitor'"
@@ -45,11 +45,11 @@
             Exhibitors ({{ exhibitorTickets }})
           </button>
           <button
-            @click="filterType = 'attendee'"
-            :class="['type-tab', { active: filterType === 'attendee' }]"
+            @click="filterType = 'student'"
+            :class="['type-tab', { active: filterType === 'student' }]"
           >
-            <font-awesome-icon icon="calendar-day" />
-            Attendees ({{ attendeeTickets }})
+            <font-awesome-icon icon="graduation-cap" />
+            Students ({{ studentTickets }})
           </button>
         </div>
 

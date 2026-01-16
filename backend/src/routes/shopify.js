@@ -47,12 +47,6 @@ const validateShopifyHmac = (req, res, next) => {
 router.post('/create-ticket', validateShopifyHmac, checkLockdown, async (req, res) => {
   let webhookLogId = null;
   
-  // DEBUG: Log incoming request details
-  console.log('==================== SHOPIFY WEBHOOK REQUEST ====================');
-  console.log('Headers:', JSON.stringify(req.headers, null, 2));
-  console.log('Body:', JSON.stringify(req.body, null, 2));
-  console.log('================================================================');
-  
   const { line_items, customer, id: order_id } = req.body;
 
   // SKU to ticket type/subtype mapping
@@ -346,10 +340,6 @@ router.post('/create-ticket', validateShopifyHmac, checkLockdown, async (req, re
 router.post('/refund', validateShopifyHmac, async (req, res) => {
   let webhookLogId = null;
   
-  console.log('==================== SHOPIFY REFUND WEBHOOK ====================');
-  console.log('Body:', JSON.stringify(req.body, null, 2));
-  console.log('================================================================');
-  
   const { id: order_id, refunds } = req.body;
   
   try {
@@ -440,10 +430,6 @@ router.post('/refund', validateShopifyHmac, async (req, res) => {
 // POST endpoint for Shopify disputes/chargebacks
 router.post('/chargeback', validateShopifyHmac, async (req, res) => {
   let webhookLogId = null;
-  
-  console.log('==================== SHOPIFY CHARGEBACK WEBHOOK ====================');
-  console.log('Body:', JSON.stringify(req.body, null, 2));
-  console.log('====================================================================');
   
   const { id: dispute_id, order_id } = req.body;
   
