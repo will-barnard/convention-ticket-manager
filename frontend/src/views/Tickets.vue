@@ -438,23 +438,6 @@ export default {
       }
     };
 
-    const sendTicketEmail = async (ticketId) => {
-      if (!confirm('Send the ticket email to this recipient?')) {
-        return;
-      }
-      
-      try {
-        await axios.post(`/api/tickets/${ticketId}/send-email`);
-        alert('Ticket email sent successfully!');
-        
-        // Reload tickets to update email_sent status
-        await loadTickets();
-      } catch (err) {
-        console.error('Error sending ticket email:', err);
-        alert('Failed to send ticket email. Please try again.');
-      }
-    };
-
     const showChangePassword = () => {
       isChangePasswordOpen.value = true;
     };
