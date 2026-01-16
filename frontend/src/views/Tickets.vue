@@ -718,12 +718,6 @@ tr:hover td {
   font-weight: 400;
   font-style: italic;
 }
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  justify-content: center;
-}
 
 .scan-status .check-icon {
   color: #4CAF50;
