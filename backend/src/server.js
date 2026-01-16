@@ -21,6 +21,7 @@ const statsRoutes = require('./routes/stats');
 const shopifyRoutes = require('./routes/shopify');
 const migrationRoutes = require('./routes/migration');
 const webhookRoutes = require('./routes/webhooks');
+const bulkEmailRoutes = require('./routes/bulk-email');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -49,6 +50,7 @@ app.use('/api/stats', statsRoutes);
 app.use('/api/shopify', shopifyRoutes);
 app.use('/api/migration', migrationRoutes);
 app.use('/api/webhooks', webhookRoutes);
+app.use('/api/bulk-email', bulkEmailRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

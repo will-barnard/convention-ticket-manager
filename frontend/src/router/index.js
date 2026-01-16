@@ -9,6 +9,7 @@ import Stats from '@/views/Stats.vue';
 import Settings from '@/views/Settings.vue';
 import UserManagement from '@/views/UserManagement.vue';
 import Webhooks from '@/views/Webhooks.vue';
+import BulkEmail from '@/views/BulkEmail.vue';
 
 const routes = [
   {
@@ -56,6 +57,12 @@ const routes = [
     path: '/webhooks',
     name: 'Webhooks',
     component: Webhooks,
+    meta: { requiresAuth: true, requiresSuperAdmin: true },
+  },
+  {
+    path: '/bulk-email',
+    name: 'BulkEmail',
+    component: BulkEmail,
     meta: { requiresAuth: true, requiresSuperAdmin: true },
   },
   {

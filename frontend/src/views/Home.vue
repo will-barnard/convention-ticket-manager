@@ -12,6 +12,7 @@
         <router-link to="/settings" class="nav-tab" active-class="active">Settings</router-link>
         <router-link v-if="authStore.user?.role === 'superadmin'" to="/users" class="nav-tab" active-class="active">Users</router-link>
         <router-link v-if="authStore.user?.role === 'superadmin'" to="/webhooks" class="nav-tab" active-class="active">Webhooks</router-link>
+        <router-link v-if="authStore.user?.role === 'superadmin'" to="/bulk-email" class="nav-tab" active-class="active">Bulk Email</router-link>
       </nav>
 
       <div v-if="showWarning && !loading && !datesConfigured" class="warning-banner">
