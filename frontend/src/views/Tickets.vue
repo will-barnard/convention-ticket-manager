@@ -138,6 +138,14 @@
                       Edit
                     </button>
                     <button 
+                      v-if="authStore.user?.role === 'superadmin' && !ticket.email_sent" 
+                      @click="sendTicketEmail(ticket.id)" 
+                      class="btn-send-email"
+                      title="Send Ticket Email"
+                    >
+                      Send Email
+                    </button>
+                    <button 
                       v-if="authStore.user?.role === 'superadmin' && ticket.ticket_type === 'attendee'" 
                       @click="toggleScanStatus(ticket)" 
                       :class="['btn-scan', { scanned: ticket.scans?.scanned }]"
@@ -413,6 +421,40 @@ export default {
       }
     };
 
+    const sendTicketEmail = async (ticketId) => {
+      if (!confirm('Send the ticket email to this recipient?')) {
+        return;
+      }
+      
+      try {
+        await axios.post(`/api/tickets/${ticketId}/send-email`);
+        alert('Ticket email sent successfully!');
+        
+        // Reload tickets to update email_sent status
+        await loadTickets();
+      } catch (err) {
+        console.error('Error sending ticket email:', err);
+        alert('Failed to send ticket email. Please try again.');
+      }
+    };
+
+    const sendTicketEmail = async (ticketId) => {
+      if (!confirm('Send the ticket email to this recipient?')) {
+        return;
+      }
+      
+      try {
+        await axios.post(`/api/tickets/${ticketId}/send-email`);
+        alert('Ticket email sent successfully!');
+        
+        // Reload tickets to update email_sent status
+        await loadTickets();
+      } catch (err) {
+        console.error('Error sending ticket email:', err);
+        alert('Failed to send ticket email. Please try again.');
+      }
+    };
+
     const showChangePassword = () => {
       isChangePasswordOpen.value = true;
     };
@@ -449,6 +491,7 @@ export default {
       closeEditModal,
       saveTicketEdits,
       toggleScanStatus,
+      sendTicketEmail,
       formatDate,
       formatTicketType,
       formatScanDate,
@@ -697,6 +740,21 @@ tr:hover td {
 
 .btn-delete:hover {
   background: #d32f2f;
+}
+
+.btn-send-email {
+  padding: 8px 12px;
+  background: #2196F3;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.2s;
+}
+
+.btn-send-email:hover {
+  background: #1976D2;
 }
 
 .scan-status {

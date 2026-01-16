@@ -58,6 +58,15 @@ docker exec -it convention-backend node src/migrations/add-shopify-order-id.js
 echo "   - Adding ticket status..."
 docker exec -it convention-backend node src/migrations/add-ticket-status.js
 
+echo "   - Adding lockdown mode..."
+docker exec -it convention-backend node src/migrations/add-lockdown-mode.js
+
+echo "   - Creating webhook logs table..."
+docker exec -it convention-backend node src/migrations/create-webhook-logs-table.js
+
+echo "   - Adding scanner user to scans..."
+docker exec -it convention-backend node src/migrations/add-scanner-user-to-scans.js
+
 echo ""
 echo "6. Seeding initial data..."
 echo "   - Creating default admin user..."

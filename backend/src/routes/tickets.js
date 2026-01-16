@@ -15,7 +15,7 @@ router.get('/', authMiddleware, async (req, res) => {
   try {
     // Get all tickets
     const ticketsResult = await db.query(
-      'SELECT id, ticket_type, ticket_subtype, name, teacher_name, email, uuid, is_used, created_at FROM tickets ORDER BY created_at DESC'
+      'SELECT id, ticket_type, ticket_subtype, name, teacher_name, email, uuid, is_used, email_sent, status, created_at FROM tickets ORDER BY created_at DESC'
     );
     
     // Get supplies for all tickets
@@ -534,6 +534,52 @@ router.post('/batch-send-emails', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Error in batch send:', error);
     res.status(500).json({ error: 'Server error during batch send' });
+  }
+});
+
+// Send individual ticket email (protected, superadmin only)
+router.post('/:id/send-email', authMiddleware, superAdminMiddleware, async (req, res) => {
+  const ticketId = parseInt(req.params.id);
+
+  try {
+    // Get ticket details
+    const ticketResult = await db.query(
+      'SELECT id, ticket_type, ticket_subtype, name, teacher_name, email, uuid FROM tickets WHERE id = $1',
+      [ticketId]
+    );
+
+    if (ticketResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Ticket not found' });
+    }
+
+    const ticket = ticketResult.rows[0];
+
+    // Generate QR code
+    const qrCodeDataUrl = await QRCode.toDataURL(ticket.uuid);
+
+    // Send email
+    await emailService.sendTicketEmail({
+      to: ticket.email,
+      name: ticket.name,
+      tickets: [{
+        uuid: ticket.uuid,
+        qrCode: qrCodeDataUrl,
+        type: ticket.ticket_type,
+        subtype: ticket.ticket_subtype,
+        teacherName: ticket.teacher_name
+      }]
+    });
+
+    // Mark as sent
+    await db.query(
+      'UPDATE tickets SET email_sent = true, email_sent_at = NOW() WHERE id = $1',
+      [ticketId]
+    );
+
+    res.json({ message: 'Ticket email sent successfully' });
+  } catch (error) {
+    console.error('Error sending ticket email:', error);
+    res.status(500).json({ error: 'Failed to send ticket email' });
   }
 });
 
