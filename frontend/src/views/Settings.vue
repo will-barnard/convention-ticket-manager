@@ -626,7 +626,8 @@ export default {
         'adult_sunday': 'Adult Sunday',
         'child_2day': 'Child 2-Day',
         'child_saturday': 'Child Saturday',
-        'child_sunday': 'Child Sunday'
+        'child_sunday': 'Child Sunday',
+        'cymbal_summit': 'Indie Cymbalsmith Event (Friday)'
       };
       return subtypeMap[subtype] || subtype;
     };
@@ -701,7 +702,8 @@ export default {
         'adult_sunday': ['sunday'],
         'child_2day': ['saturday', 'sunday'],
         'child_saturday': ['saturday'],
-        'child_sunday': ['sunday']
+        'child_sunday': ['sunday'],
+        'cymbal_summit': ['friday']
       };
       return dayMapping[subtype]?.includes(day) || false;
     };

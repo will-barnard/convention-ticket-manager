@@ -22,8 +22,8 @@ if (isEmailConfigured) {
   });
 }
 
-// Send ticket email with QR code
-async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherName, supplies, qrCodeDataUrl, verifyUrl }) {
+// Send ticket email with QR code(s)
+async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherName, supplies, qrCodeDataUrl, verifyUrl, tickets }) {
   // Skip email if not configured
   if (!isEmailConfigured || !transporter) {
     console.log('⚠️  Email not configured - skipping email send');
@@ -54,14 +54,10 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
     adult_sunday: 'Adult 1-Day Pass (Sunday Only)',
     child_2day: 'Child 2-Day Pass (Saturday, Sunday)',
     child_saturday: 'Child 1-Day Pass (Saturday Only)',
-    child_sunday: 'Child 1-Day Pass (Sunday Only)'
+    child_sunday: 'Child 1-Day Pass (Sunday Only)',
+    cymbal_summit: 'Indie Cymbalsmith Event Ticket (Friday Only)'
   };
 
-  let ticketLabel = ticketTypeLabels[ticketType] || 'Convention Ticket';
-  if (ticketType === 'attendee' && ticketSubtype) {
-    ticketLabel = subtypeLabels[ticketSubtype] || ticketLabel;
-  }
-  
   // Fetch convention name from settings
   let conventionName = 'Convention';
   try {
@@ -71,6 +67,120 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
     }
   } catch (error) {
     console.log('Note: Could not fetch convention name from settings, using default');
+  }
+
+  // Handle consolidated email with multiple tickets
+  if (tickets && Array.isArray(tickets) && tickets.length > 0) {
+    let ticketsHtml = '';
+    
+    tickets.forEach((ticket, index) => {
+      let ticketLabel = ticketTypeLabels[ticket.ticket_type] || 'Convention Ticket';
+      if (ticket.ticket_type === 'attendee' && ticket.ticket_subtype) {
+        ticketLabel = subtypeLabels[ticket.ticket_subtype] || ticketLabel;
+      }
+      
+      ticketsHtml += `
+        <div style="background: white; padding: 25px; border-radius: 8px; margin-bottom: 25px; border: 2px solid #ddd;">
+          <h2 style="color: #4CAF50; margin-top: 0; border-bottom: 2px solid #4CAF50; padding-bottom: 10px;">
+            Ticket ${index + 1} of ${tickets.length}: ${ticketLabel}
+          </h2>
+          <div style="text-align: center; margin: 20px 0;">
+            <img src="cid:qrcode${index}" style="max-width: 300px; border: 2px solid #ddd; padding: 10px; background: white;" alt="QR Code ${index + 1}"/>
+          </div>
+          <p style="text-align: center; color: #666; font-size: 14px;">
+            Scan this QR code at the entrance for check-in
+          </p>
+        </div>
+      `;
+    });
+
+    const mailOptions = {
+      from: process.env.EMAIL_FROM,
+      to: to,
+      subject: `Your ${conventionName} Tickets (${tickets.length} ${tickets.length === 1 ? 'Ticket' : 'Tickets'})`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              line-height: 1.6;
+              color: #333;
+              background-color: #f4f4f4;
+              margin: 0;
+              padding: 0;
+            }
+            .container {
+              max-width: 700px;
+              margin: 0 auto;
+              padding: 20px;
+            }
+            .header {
+              background-color: #4CAF50;
+              color: white;
+              padding: 30px;
+              text-align: center;
+              border-radius: 8px 8px 0 0;
+            }
+            .content {
+              padding: 30px;
+              background-color: #f9f9f9;
+            }
+            .footer {
+              text-align: center;
+              padding: 20px;
+              color: #666;
+              font-size: 12px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1 style="margin: 0;">🎫 Your ${conventionName} Tickets</h1>
+            </div>
+            <div class="content">
+              <p>Hello ${name},</p>
+              <p>Thank you for your order! Below are your <strong>${tickets.length} ticket(s)</strong> for ${conventionName}. Each ticket has a unique QR code.</p>
+              <p><strong>Important:</strong> Please present each QR code at the entrance for check-in. You can print this email or show it on your phone.</p>
+              
+              ${ticketsHtml}
+
+              <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 5px; margin-top: 20px;">
+                <p style="margin: 0;"><strong>⚠️ Please Note:</strong></p>
+                <ul style="margin: 10px 0;">
+                  <li>Each QR code can only be scanned once</li>
+                  <li>Keep this email safe - you'll need it at the entrance</li>
+                  <li>If you have multiple tickets, present each QR code separately</li>
+                </ul>
+              </div>
+            </div>
+            <div class="footer">
+              <p>See you at ${conventionName}!</p>
+              <p>If you have any questions, please contact us.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+      attachments: tickets.map((ticket, index) => {
+        const base64Data = ticket.qrCodeDataUrl.replace(/^data:image\/png;base64,/, '');
+        return {
+          filename: `qr-code-${index + 1}.png`,
+          content: Buffer.from(base64Data, 'base64'),
+          cid: `qrcode${index}`
+        };
+      })
+    };
+
+    return transporter.sendMail(mailOptions);
+  }
+
+  // Handle single ticket email (backward compatibility for manual ticket creation)
+  let ticketLabel = ticketTypeLabels[ticketType] || 'Convention Ticket';
+  if (ticketType === 'attendee' && ticketSubtype) {
+    ticketLabel = subtypeLabels[ticketSubtype] || ticketLabel;
   }
   
   // Build supplies list HTML

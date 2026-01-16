@@ -64,7 +64,7 @@ router.post('/create-ticket', validateShopifyHmac, checkLockdown, async (req, re
     '1-day-pass-child-saturday': { type: 'attendee', subtype: 'child_saturday' },
     '1-day-pass-child-sunday': { type: 'attendee', subtype: 'child_sunday' },
     '2-day-pass-child': { type: 'attendee', subtype: 'child_2day' },
-    'indie-cymbalsmith-event-ticket': { type: 'cymbal_summit', subtype: null }
+    'indie-cymbalsmith-event-ticket': { type: 'attendee', subtype: 'cymbal_summit' }
   };
 
   // Validate required fields
@@ -220,7 +220,7 @@ router.post('/create-ticket', validateShopifyHmac, checkLockdown, async (req, re
     const createdTickets = [];
     const failedTickets = [];
 
-    // Process each ticket line item
+    // Process each ticket line item - Create all tickets first without sending emails
     for (const lineItem of ticketLineItems) {
       const sku = lineItem.sku.toLowerCase();
       const ticketMapping = skuMapping[sku];
@@ -248,57 +248,49 @@ router.post('/create-ticket', validateShopifyHmac, checkLockdown, async (req, re
           const verifyUrl = `${frontendUrl}/verify/${ticket.uuid}`;
           const qrCodeDataUrl = await QRCode.toDataURL(verifyUrl);
 
-          // Send email if auto_send_emails is enabled
-          if (autoSendEmails) {
-            try {
-              await sendTicketEmail({
-                to: ticket.email,
-                name: ticket.name,
-                ticketType: ticket.ticket_type,
-                ticketSubtype: ticket.ticket_subtype,
-                qrCodeDataUrl,
-                verifyUrl
-              });
-              
-              // Update email_sent status
-              await db.query(
-                'UPDATE tickets SET email_sent = true, email_sent_at = NOW() WHERE id = $1',
-                [ticket.id]
-              );
-              
-              ticket.email_sent = true;
-            } catch (emailError) {
-              console.error('Failed to send ticket email:', emailError);
-              
-              // Send admin notification about the bounce/failure
-              try {
-                await sendAdminNotification({
-                  subject: 'Shopify Order Email Delivery Failure',
-                  message: 'A ticket email from a Shopify order failed to send. The recipient may have an invalid email address or the email server rejected the message.',
-                  ticketDetails: {
-                    recipientEmail: ticket.email,
-                    recipientName: ticket.name,
-                    ticketType: `${ticket.ticket_type} (${ticket.ticket_subtype})`,
-                    ticketId: ticket.id,
-                    error: emailError.message || 'Unknown error'
-                  }
-                });
-              } catch (notificationErr) {
-                console.error('Failed to send admin notification:', notificationErr);
-              }
-            }
-          }
-
           createdTickets.push({
-            id: ticket.id,
-            uuid: ticket.uuid,
-            shopify_order_id: ticket.shopify_order_id,
-            email_sent: ticket.email_sent,
-            sku: sku
+            ...ticket,
+            qrCodeDataUrl,
+            verifyUrl
           });
+
+          console.log(`      ✓ Created ticket ${i + 1}/${quantity} for ${lineItem.name}`);
         } catch (ticketError) {
           console.error('Failed to create ticket:', ticketError);
           failedTickets.push({ sku, error: ticketError.message });
+        }
+      }
+    }
+
+    // Send one consolidated email with all tickets if auto_send_emails is enabled
+    if (autoSendEmails && createdTickets.length > 0) {
+      try {
+        await sendTicketEmail({
+          to: customerEmail,
+          name: customerName,
+          tickets: createdTickets
+        });
+        
+        // Update email_sent status for all tickets
+        const ticketIds = createdTickets.map(t => t.id);
+        await db.query(
+          'UPDATE tickets SET email_sent = true, email_sent_at = NOW() WHERE id = ANY($1)',
+          [ticketIds]
+        );
+        
+        console.log(`📧 Sent consolidated email with ${createdTickets.length} ticket(s) to ${customerEmail}`);
+      } catch (emailError) {
+        console.error('Failed to send ticket email:', emailError);
+        
+        // Send admin notification about the bounce/failure
+        try {
+          await sendAdminNotification({
+            subject: 'Shopify Order Email Delivery Failure',
+            message: 'A ticket email from a Shopify order failed to send. The recipient may have an invalid email address or the email server rejected the message.',
+            ticketDetails: `Recipient: ${customerName} <${customerEmail}>\nOrder ID: ${shopify_order_id}\nTicket Count: ${createdTickets.length}\nError: ${emailError.message}`
+          });
+        } catch (notifyError) {
+          console.error('Failed to send admin notification:', notifyError);
         }
       }
     }

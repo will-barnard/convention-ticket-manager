@@ -191,6 +191,7 @@
                 <option value="child_2day">Child 2-Day Pass</option>
                 <option value="child_saturday">Child Saturday Pass</option>
                 <option value="child_sunday">Child Sunday Pass</option>
+                <option value="cymbal_summit">Indie Cymbalsmith Event Ticket (Friday Only)</option>
               </select>
             </div>
             

@@ -85,6 +85,14 @@ router.post('/',
       const { ticketType, ticketSubtype, name, teacherName, email, supplies } = req.body;
       const ticketUuid = uuidv4();
 
+      // Validate ticket_subtype for attendee tickets
+      if (ticketType === 'attendee') {
+        const validSubtypes = ['vip', 'adult_2day', 'adult_saturday', 'adult_sunday', 'child_2day', 'child_saturday', 'child_sunday', 'cymbal_summit'];
+        if (!ticketSubtype || !validSubtypes.includes(ticketSubtype)) {
+          return res.status(400).json({ error: 'Valid ticket_subtype is required for attendee tickets' });
+        }
+      }
+
       // Validate required fields based on ticket type
       if (ticketType === 'student' && !teacherName) {
         return res.status(400).json({ error: 'Teacher name is required for student tickets' });
@@ -102,7 +110,8 @@ router.post('/',
         'adult_sunday',
         'child_2day',
         'child_saturday',
-        'child_sunday'
+        'child_sunday',
+        'cymbal_summit'
       ];
       
       if (ticketType === 'attendee' && !validSubtypes.includes(ticketSubtype)) {
@@ -319,7 +328,7 @@ router.put('/:id', authMiddleware, superAdminMiddleware, checkLockdown, async (r
 
     // Validate ticket_subtype for attendee tickets
     if (ticket.ticket_type === 'attendee' && ticket_subtype) {
-      const validSubtypes = ['friday-only', 'saturday-only', 'weekend-pass'];
+      const validSubtypes = ['vip', 'adult_2day', 'adult_saturday', 'adult_sunday', 'child_2day', 'child_saturday', 'child_sunday', 'cymbal_summit'];
       if (!validSubtypes.includes(ticket_subtype)) {
         return res.status(400).json({ error: 'Invalid ticket_subtype' });
       }
