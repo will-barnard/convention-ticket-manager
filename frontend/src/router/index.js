@@ -8,6 +8,7 @@ import VerifyTicket from '@/views/VerifyTicket.vue';
 import Stats from '@/views/Stats.vue';
 import Settings from '@/views/Settings.vue';
 import UserManagement from '@/views/UserManagement.vue';
+import Webhooks from '@/views/Webhooks.vue';
 
 const routes = [
   {
@@ -49,6 +50,12 @@ const routes = [
     path: '/users',
     name: 'UserManagement',
     component: UserManagement,
+    meta: { requiresAuth: true, requiresSuperAdmin: true },
+  },
+  {
+    path: '/webhooks',
+    name: 'Webhooks',
+    component: Webhooks,
     meta: { requiresAuth: true, requiresSuperAdmin: true },
   },
   {

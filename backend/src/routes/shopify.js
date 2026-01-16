@@ -45,6 +45,8 @@ const validateShopifyHmac = (req, res, next) => {
 
 // POST endpoint for Shopify to create attendee tickets
 router.post('/create-ticket', validateShopifyHmac, checkLockdown, async (req, res) => {
+  let webhookLogId = null;
+  
   // DEBUG: Log incoming request details
   console.log('==================== SHOPIFY WEBHOOK REQUEST ====================');
   console.log('Headers:', JSON.stringify(req.headers, null, 2));
@@ -68,6 +70,22 @@ router.post('/create-ticket', validateShopifyHmac, checkLockdown, async (req, re
   // Validate required fields
   if (!line_items || !Array.isArray(line_items)) {
     console.log('❌ 400 Bad Request: Missing or invalid line_items array');
+    
+    // Log failed webhook
+    if (webhookLogId === null) {
+      try {
+        const logResult = await db.query(
+          `INSERT INTO webhook_logs (shopify_order_id, webhook_data, processed, error_message, created_at) 
+           VALUES ($1, $2, FALSE, $3, NOW()) 
+           RETURNING id`,
+          [order_id ? String(order_id) : null, JSON.stringify(req.body), 'Missing or invalid line_items array']
+        );
+        webhookLogId = logResult.rows[0].id;
+      } catch (logErr) {
+        console.error('Failed to log webhook error:', logErr);
+      }
+    }
+    
     return res.status(400).json({ 
       error: 'Missing required field: line_items must be an array' 
     });
@@ -75,6 +93,22 @@ router.post('/create-ticket', validateShopifyHmac, checkLockdown, async (req, re
 
   if (!customer || !customer.email || !customer.first_name) {
     console.log('❌ 400 Bad Request: Missing customer information', { customer });
+    
+    // Log failed webhook
+    if (webhookLogId === null) {
+      try {
+        const logResult = await db.query(
+          `INSERT INTO webhook_logs (shopify_order_id, webhook_data, processed, error_message, created_at) 
+           VALUES ($1, $2, FALSE, $3, NOW()) 
+           RETURNING id`,
+          [order_id ? String(order_id) : null, JSON.stringify(req.body), 'Missing customer information']
+        );
+        webhookLogId = logResult.rows[0].id;
+      } catch (logErr) {
+        console.error('Failed to log webhook error:', logErr);
+      }
+    }
+    
     return res.status(400).json({ 
       error: 'Missing required fields: customer.email and customer.first_name are required' 
     });
@@ -83,6 +117,21 @@ router.post('/create-ticket', validateShopifyHmac, checkLockdown, async (req, re
   const shopify_order_id = order_id ? String(order_id) : null;
   const customerName = `${customer.first_name} ${customer.last_name || ''}`.trim();
   const customerEmail = customer.email;
+
+  // Log webhook to database FIRST (before any processing)
+  try {
+    const webhookLogResult = await db.query(
+      `INSERT INTO webhook_logs (shopify_order_id, webhook_data, processed, created_at) 
+       VALUES ($1, $2, FALSE, NOW()) 
+       RETURNING id`,
+      [shopify_order_id, JSON.stringify(req.body)]
+    );
+    webhookLogId = webhookLogResult.rows[0].id;
+    console.log(`📝 Webhook logged with ID: ${webhookLogId}`);
+  } catch (logError) {
+    console.error('❌ Failed to log webhook to database:', logError);
+    // Continue processing even if logging fails
+  }
 
   console.log(`📦 Processing order ${shopify_order_id} for ${customerName} (${customerEmail})`);
   console.log(`   Found ${line_items.length} line item(s) in order`);
@@ -97,6 +146,24 @@ router.post('/create-ticket', validateShopifyHmac, checkLockdown, async (req, re
       
       if (duplicateCheck.rows.length > 0) {
         console.log(`Duplicate Shopify order detected: ${shopify_order_id}. Returning existing tickets.`);
+        
+        // Mark webhook as processed (duplicate)
+        if (webhookLogId) {
+          try {
+            await db.query(
+              `UPDATE webhook_logs 
+               SET processed = TRUE, 
+                   processed_at = NOW(), 
+                   tickets_created = $1,
+                   error_message = 'Duplicate order - tickets already exist'
+               WHERE id = $2`,
+              [duplicateCheck.rows.length, webhookLogId]
+            );
+          } catch (updateError) {
+            console.error('Failed to update webhook log:', updateError);
+          }
+        }
+        
         return res.status(200).json({
           success: true,
           message: 'Order already processed',
@@ -121,6 +188,24 @@ router.post('/create-ticket', validateShopifyHmac, checkLockdown, async (req, re
 
     if (ticketLineItems.length === 0) {
       console.log('ℹ️  No ticket items found in this order. Skipping ticket creation.');
+      
+      // Mark webhook as processed (no tickets to create)
+      if (webhookLogId) {
+        try {
+          await db.query(
+            `UPDATE webhook_logs 
+             SET processed = TRUE, 
+                 processed_at = NOW(), 
+                 tickets_created = 0,
+                 error_message = 'No ticket items found in order'
+             WHERE id = $1`,
+            [webhookLogId]
+          );
+        } catch (updateError) {
+          console.error('Failed to update webhook log:', updateError);
+        }
+      }
+      
       return res.status(200).json({
         success: true,
         message: 'No ticket items found in order',
@@ -220,6 +305,23 @@ router.post('/create-ticket', validateShopifyHmac, checkLockdown, async (req, re
 
     console.log(`✅ Successfully created ${createdTickets.length} ticket(s) from order ${shopify_order_id}`);
 
+    // Mark webhook as processed in database
+    if (webhookLogId) {
+      try {
+        await db.query(
+          `UPDATE webhook_logs 
+           SET processed = TRUE, 
+               processed_at = NOW(), 
+               tickets_created = $1
+           WHERE id = $2`,
+          [createdTickets.length, webhookLogId]
+        );
+        console.log(`✅ Webhook ${webhookLogId} marked as processed`);
+      } catch (updateError) {
+        console.error('Failed to update webhook log:', updateError);
+      }
+    }
+
     res.status(201).json({
       success: true,
       message: `Successfully created ${createdTickets.length} ticket(s)`,
@@ -229,6 +331,21 @@ router.post('/create-ticket', validateShopifyHmac, checkLockdown, async (req, re
 
   } catch (error) {
     console.error('Error processing Shopify order:', error);
+    
+    // Update webhook log with error
+    if (webhookLogId) {
+      try {
+        await db.query(
+          `UPDATE webhook_logs 
+           SET error_message = $1 
+           WHERE id = $2`,
+          [error.message || 'Unknown error processing webhook', webhookLogId]
+        );
+      } catch (updateError) {
+        console.error('Failed to update webhook log with error:', updateError);
+      }
+    }
+    
     res.status(500).json({ error: 'Failed to process order' });
   }
 });

@@ -20,6 +20,7 @@ const settingsRoutes = require('./routes/settings');
 const statsRoutes = require('./routes/stats');
 const shopifyRoutes = require('./routes/shopify');
 const migrationRoutes = require('./routes/migration');
+const webhookRoutes = require('./routes/webhooks');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -47,6 +48,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/shopify', shopifyRoutes);
 app.use('/api/migration', migrationRoutes);
+app.use('/api/webhooks', webhookRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

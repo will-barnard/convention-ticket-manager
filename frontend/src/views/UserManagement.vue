@@ -11,6 +11,7 @@
         <router-link to="/stats" class="nav-tab" active-class="active">Stats</router-link>
         <router-link to="/settings" class="nav-tab" active-class="active">Settings</router-link>
         <router-link v-if="authStore.user?.role === 'superadmin'" to="/users" class="nav-tab" active-class="active">Users</router-link>
+        <router-link v-if="authStore.user?.role === 'superadmin'" to="/webhooks" class="nav-tab" active-class="active">Webhooks</router-link>
       </nav>
 
       <div class="page-content">
