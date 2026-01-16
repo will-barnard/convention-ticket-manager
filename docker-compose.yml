@@ -30,10 +30,10 @@ services:
       JWT_EXPIRES_IN: 2y
       SMTP_HOST: smtp.gmail.com
       SMTP_PORT: 587
-      SMTP_USER: ${SMTP_USER}
+      SMTP_USER: ${SMTP_USER:-chicagodrumshow@gmail.com}
       SMTP_PASS: ${SMTP_PASS}
-      EMAIL_FROM: Chicago Drum Show <${SMTP_USER}>
-      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      EMAIL_FROM: Chicago Drum Show <${SMTP_USER:-chicagodrumshow@gmail.com}>
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-willbarnardmusic@gmail.com}
       SHOPIFY_API_KEY: ${SHOPIFY_API_KEY}
       FRONTEND_URL: http://localhost:49192
     ports:
