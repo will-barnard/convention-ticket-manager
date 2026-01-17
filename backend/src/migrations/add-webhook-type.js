@@ -10,11 +10,10 @@ async function addWebhookType() {
     `);
     
     console.log('✓ Successfully added webhook_type column');
+    process.exit(0);
   } catch (error) {
     console.error('Error adding webhook_type column:', error);
-    throw error;
-  } finally {
-    await db.end();
+    process.exit(1);
   }
 }
 
