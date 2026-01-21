@@ -131,7 +131,7 @@
                 <td>
                   <div class="actions-cell">
                     <button 
-                      v-if="authStore.user?.role === 'superadmin'" 
+                      v-if="authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin'" 
                       @click="openEditModal(ticket)" 
                       class="btn-edit"
                       title="Edit Ticket"
@@ -139,7 +139,7 @@
                       Edit
                     </button>
                     <button 
-                      v-if="authStore.user?.role === 'superadmin' && !ticket.email_sent" 
+                      v-if="(authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin') && !ticket.email_sent" 
                       @click="sendTicketEmail(ticket.id)" 
                       class="btn-send-email"
                       title="Send Ticket Email"
@@ -147,7 +147,7 @@
                       Send Email
                     </button>
                     <button 
-                      v-if="authStore.user?.role === 'superadmin' && ticket.ticket_type === 'attendee'" 
+                      v-if="(authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin') && ticket.ticket_type === 'attendee'" 
                       @click="toggleScanStatus(ticket)" 
                       :class="['btn-scan', { scanned: ticket.scans?.scanned }]"
                       :title="ticket.scans?.scanned ? 'Mark as Not Scanned' : 'Mark as Scanned'"
