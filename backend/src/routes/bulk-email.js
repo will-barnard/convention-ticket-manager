@@ -1,5 +1,5 @@
 const express = require('express');
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const db = require('../config/database');
 const authMiddleware = require('../middleware/auth');
 const superAdminMiddleware = require('../middleware/superadmin');
@@ -10,23 +10,11 @@ const router = express.Router();
 const lastSendTimes = new Map();
 const RATE_LIMIT_MS = 60000; // 1 minute between bulk sends
 
-// Create transporter for sending emails
-const isEmailConfigured = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS;
-let transporter = null;
+// Create Resend client
+const isEmailConfigured = process.env.RESEND_API_KEY;
+let resend = null;
 if (isEmailConfigured) {
-  transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: process.env.SMTP_PORT,
-    secure: false,
-    requireTLS: true,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-    tls: {
-      rejectUnauthorized: false
-    }
-  });
+  resend = new Resend(process.env.RESEND_API_KEY);
 }
 
 // Send test email
@@ -43,7 +31,7 @@ router.post('/test', authMiddleware, superAdminMiddleware, async (req, res) => {
     }
 
     // Send test email
-    const mailOptions = {
+    await resend.emails.send({
       from: process.env.EMAIL_FROM,
       to: testEmail,
       subject: `[TEST] ${subject}`,
@@ -59,9 +47,7 @@ router.post('/test', authMiddleware, superAdminMiddleware, async (req, res) => {
           </div>
         </div>
       `
-    };
-
-    await transporter.sendMail(mailOptions);
+    });
 
     console.log(`📧 Test email sent to ${testEmail} by ${req.user.email}`);
 
@@ -135,7 +121,7 @@ router.post('/send', authMiddleware, superAdminMiddleware, async (req, res) => {
 
     for (const recipient of recipients) {
       try {
-        const mailOptions = {
+        await resend.emails.send({
           from: process.env.EMAIL_FROM,
           to: recipient.email,
           subject: subject,
@@ -148,9 +134,7 @@ router.post('/send', authMiddleware, superAdminMiddleware, async (req, res) => {
               </div>
             </div>
           `
-        };
-
-        await transporter.sendMail(mailOptions);
+        });
         sentCount++;
 
         // 6-second delay between emails (10 per minute)
