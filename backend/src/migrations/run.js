@@ -85,6 +85,28 @@ async function runMigrations() {
     `);
     console.log('✓ Indexes created');
 
+    // Update ticket status constraint to include 'cancelled'
+    await db.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.table_constraints 
+          WHERE constraint_name = 'valid_ticket_status' AND table_name = 'tickets'
+        ) THEN
+          ALTER TABLE tickets DROP CONSTRAINT valid_ticket_status;
+        END IF;
+        
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'tickets' AND column_name = 'status'
+        ) THEN
+          ALTER TABLE tickets ADD CONSTRAINT valid_ticket_status 
+          CHECK (status IN ('valid', 'invalid', 'refunded', 'cancelled', 'chargeback'));
+        END IF;
+      END $$;
+    `);
+    console.log('✓ Ticket status constraint updated to include cancelled');
+
     console.log('Migrations completed successfully!');
     process.exit(0);
   } catch (error) {
