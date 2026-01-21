@@ -1,5 +1,7 @@
 const { Resend } = require('resend');
 const db = require('../config/database');
+const fs = require('fs');
+const path = require('path');
 
 // Check if email is configured
 const isEmailConfigured = process.env.RESEND_API_KEY;
@@ -45,11 +47,21 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
   // Fetch convention name and logo from settings
   let conventionName = 'Convention';
   let logoUrl = null;
+  let logoBase64 = null;
   try {
     const settingsResult = await db.query('SELECT convention_name, logo_url FROM settings LIMIT 1');
     if (settingsResult.rows.length > 0) {
       conventionName = settingsResult.rows[0].convention_name;
       logoUrl = settingsResult.rows[0].logo_url;
+      
+      // Read logo file and convert to base64 if it exists
+      if (logoUrl) {
+        const logoPath = path.join(__dirname, '../..', logoUrl);
+        if (fs.existsSync(logoPath)) {
+          const logoBuffer = fs.readFileSync(logoPath);
+          logoBase64 = logoBuffer.toString('base64');
+        }
+      }
     }
   } catch (error) {
     console.log('Note: Could not fetch convention settings, using defaults');
@@ -88,6 +100,15 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
         </div>
       `;
     });
+
+    // Add logo to attachments if available
+    if (logoBase64) {
+      attachments.push({
+        filename: 'logo.png',
+        content: logoBase64,
+        content_id: 'logo'
+      });
+    }
 
     return resend.emails.send({
       from: process.env.EMAIL_FROM,
@@ -132,8 +153,8 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
         </head>
         <body>
           <div class="container">
-            ${logoUrl ? `<div style="text-align: center; padding: 20px 0; background-color: white;">
-              <img src="${process.env.FRONTEND_URL}${logoUrl}" alt="${conventionName}" style="max-width: 100%; max-height: 150px; object-fit: contain;" />
+            ${logoBase64 ? `<div style="text-align: center; padding: 20px 0; background-color: white;">
+              <img src="cid:logo" alt="${conventionName}" style="max-width: 100%; max-height: 150px; object-fit: contain;" />
             </div>` : ''}
             <div class="header">
               <h1 style="margin: 0;">Your ${conventionName} Tickets</h1>
@@ -195,6 +216,24 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
   // Convert base64 QR code to buffer for attachment
   const base64Data = qrCodeDataUrl.replace(/^data:image\/png;base64,/, '');
 
+  // Prepare attachments
+  const singleTicketAttachments = [
+    {
+      filename: 'qrcode.png',
+      content: base64Data,
+      content_id: 'qrcode'
+    }
+  ];
+
+  // Add logo if available
+  if (logoBase64) {
+    singleTicketAttachments.push({
+      filename: 'logo.png',
+      content: logoBase64,
+      content_id: 'logo'
+    });
+  }
+
   return resend.emails.send({
     from: process.env.EMAIL_FROM,
     to: to,
@@ -253,8 +292,8 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
       </head>
       <body>
         <div class="container">
-          ${logoUrl ? `<div style="text-align: center; padding: 20px 0; background-color: white;">
-            <img src="${process.env.FRONTEND_URL}${logoUrl}" alt="${conventionName}" style="max-width: 100%; max-height: 150px; object-fit: contain;" />
+          ${logoBase64 ? `<div style="text-align: center; padding: 20px 0; background-color: white;">
+            <img src="cid:logo" alt="${conventionName}" style="max-width: 100%; max-height: 150px; object-fit: contain;" />
           </div>` : ''}
           <div class="header">
             <h1>${ticketLabel}</h1>
@@ -284,13 +323,7 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
       </body>
       </html>
     `,
-    attachments: [
-      {
-        filename: 'qrcode.png',
-        content: base64Data,
-        content_id: 'qrcode'
-      }
-    ]
+    attachments: singleTicketAttachments
   });
 }
 
