@@ -274,17 +274,29 @@ export default {
       }
       
       // Extract UUID from QR code data
-      // Assuming QR code contains URL like: http://domain/verify/UUID
-      const uuidMatch = data.match(/\/verify\/([a-f0-9-]+)/i);
+      // Handle two formats:
+      // 1. Full URL: http://domain/verify/UUID
+      // 2. Raw UUID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+      let uuid;
       
-      if (!uuidMatch) {
+      const urlMatch = data.match(/\/verify\/([a-f0-9-]+)/i);
+      if (urlMatch) {
+        uuid = urlMatch[1];
+      } else {
+        // Check if it's a raw UUID format
+        const uuidRegex = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+        if (uuidRegex.test(data.trim())) {
+          uuid = data.trim();
+        }
+      }
+      
+      if (!uuid) {
         console.error('Invalid QR code format:', data);
         // Show error popup for invalid QR
         showErrorPopupNotification('✕', 'Invalid QR Code Format', 'error');
         return;
       }
 
-      const uuid = uuidMatch[1];
       await verifyTicket(uuid);
     };
 
