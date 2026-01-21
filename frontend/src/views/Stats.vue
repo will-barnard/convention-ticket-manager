@@ -28,13 +28,12 @@
       </div>
 
       <div v-else class="stats-content">
-        <h2>Ticket Statistics by Day</h2>
+        <h2>Ticket Statistics by Category</h2>
         
         <div class="stats-grid">
           <div v-for="day in stats" :key="day.day" class="day-card">
             <div class="day-header">
               <h3>{{ day.day }}</h3>
-              <p class="date">{{ formatDate(day.date) }}</p>
             </div>
             
             <div class="stats-content">
@@ -117,6 +116,24 @@
             </div>
           </div>
         </div>
+
+        <div class="ticket-type-breakdown-card">
+          <h3>Breakdown by Ticket Type</h3>
+          <div class="ticket-type-table">
+            <div class="ticket-type-header">
+              <div class="ticket-type-col">Ticket Type</div>
+              <div class="ticket-type-col">Sold</div>
+              <div class="ticket-type-col">Scanned</div>
+              <div class="ticket-type-col">Remaining</div>
+            </div>
+            <div v-for="ticketType in ticketTypeBreakdown" :key="ticketType.type" class="ticket-type-row">
+              <div class="ticket-type-col type-name">{{ ticketType.type }}</div>
+              <div class="ticket-type-col">{{ ticketType.sold }}</div>
+              <div class="ticket-type-col">{{ ticketType.scanned }}</div>
+              <div class="ticket-type-col">{{ ticketType.remaining }}</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -144,6 +161,7 @@ export default {
     const loading = ref(true);
     const error = ref('');
     const isChangePasswordOpen = ref(false);
+    const ticketTypeBreakdown = ref([]);
 
     const totalSold = computed(() => {
       return stats.value.reduce((sum, day) => sum + day.sold, 0);
@@ -177,6 +195,7 @@ export default {
       try {
         const response = await axios.get('/api/stats');
         stats.value = response.data.stats || [];
+        ticketTypeBreakdown.value = response.data.ticketTypeBreakdown || [];
       } catch (err) {
         console.error('Error loading usage stats:', err);
         error.value = 'Failed to load usage statistics. Please try again.';
@@ -216,6 +235,7 @@ export default {
       loading,
       error,
       isChangePasswordOpen,
+      ticketTypeBreakdown,
       totalSold,
       totalScanned,
       overallPercentage,
@@ -574,6 +594,64 @@ export default {
   font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.ticket-type-breakdown-card {
+  background: white;
+  border-radius: 12px;
+  padding: 30px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  margin-top: 30px;
+}
+
+.ticket-type-breakdown-card h3 {
+  margin: 0 0 25px 0;
+  color: #333;
+  font-size: 24px;
+}
+
+.ticket-type-table {
+  width: 100%;
+}
+
+.ticket-type-header {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 15px;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 10px;
+}
+
+.ticket-type-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 15px;
+  padding: 15px;
+  border-bottom: 1px solid #e0e0e0;
+  transition: background 0.2s;
+}
+
+.ticket-type-row:hover {
+  background: #f8f9fa;
+}
+
+.ticket-type-row:last-child {
+  border-bottom: none;
+}
+
+.ticket-type-col {
+  display: flex;
+  align-items: center;
+  font-size: 15px;
+}
+
+.ticket-type-col.type-name {
+  font-weight: 500;
+  color: #333;
 }
 
 @media (max-width: 768px) {

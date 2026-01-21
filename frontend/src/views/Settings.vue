@@ -608,45 +608,47 @@ export default {
         let csvContent = '';
         
         if (ticketType === 'student') {
-          // Student CSV: Name, Email, Teacher, Created, Friday Check-in, Saturday Check-in, Sunday Check-in
-          csvContent = 'Name,Email,Teacher,Created,Friday Check-in,Saturday Check-in,Sunday Check-in\n';
+          // Student CSV: Name, Email, Teacher, Status, Email Sent, Created, Used
+          csvContent = 'Name,Email,Teacher,Status,Email Sent,Created,Used\n';
           tickets.forEach(ticket => {
             const name = `"${ticket.name}"`;
             const email = ticket.email;
             const teacher = `"${ticket.teacher_name || ''}"`;
+            const status = ticket.status || 'valid';
+            const emailSent = ticket.email_sent ? 'Yes' : 'No';
             const created = new Date(ticket.created_at).toLocaleDateString();
-            const friCheckin = ticket.scans?.friday ? 'Yes' : 'No';
-            const satCheckin = ticket.scans?.saturday ? 'Yes' : 'No';
-            const sunCheckin = ticket.scans?.sunday ? 'Yes' : 'No';
-            csvContent += `${name},${email},${teacher},${created},${friCheckin},${satCheckin},${sunCheckin}\n`;
+            const used = ticket.is_used ? 'Yes' : 'No';
+            csvContent += `${name},${email},${teacher},${status},${emailSent},${created},${used}\n`;
           });
         } else if (ticketType === 'exhibitor') {
-          // Exhibitor CSV: Name, Email, Supplies, Created, Friday Check-in, Saturday Check-in, Sunday Check-in
-          csvContent = 'Name,Email,Supplies,Created,Friday Check-in,Saturday Check-in,Sunday Check-in\n';
+          // Exhibitor CSV: Name, Email, Booth Range, Booths, Supplies, Status, Created, Used
+          csvContent = 'Name,Email,Booth Range,Booths,Supplies,Status,Created,Used\n';
           tickets.forEach(ticket => {
             const name = `"${ticket.name}"`;
             const email = ticket.email;
+            const boothRange = ticket.booth_range ? `"${ticket.booth_range}"` : '""';
+            const booths = ticket.quantity || 1;
             const supplies = ticket.supplies 
               ? `"${ticket.supplies.map(s => `${s.name} (${s.quantity})`).join('; ')}"` 
               : '""';
+            const status = ticket.status || 'valid';
             const created = new Date(ticket.created_at).toLocaleDateString();
-            const friCheckin = ticket.scans?.friday ? 'Yes' : 'No';
-            const satCheckin = ticket.scans?.saturday ? 'Yes' : 'No';
-            const sunCheckin = ticket.scans?.sunday ? 'Yes' : 'No';
-            csvContent += `${name},${email},${supplies},${created},${friCheckin},${satCheckin},${sunCheckin}\n`;
+            const used = ticket.is_used ? 'Yes' : 'No';
+            csvContent += `${name},${email},${boothRange},${booths},${supplies},${status},${created},${used}\n`;
           });
         } else if (ticketType === 'attendee') {
-          // Attendee CSV: Name, Email, Ticket Type, Created, Friday Check-in, Saturday Check-in, Sunday Check-in
-          csvContent = 'Name,Email,Ticket Type,Created,Friday Check-in,Saturday Check-in,Sunday Check-in\n';
+          // Attendee CSV: Name, Email, Ticket Type, Status, Email Sent, Created, Scanned
+          csvContent = 'Name,Email,Ticket Type,Status,Email Sent,Created,Scanned,Scanned On\n';
           tickets.forEach(ticket => {
             const name = `"${ticket.name}"`;
             const email = ticket.email;
             const subtype = formatAttendeeSubtype(ticket.ticket_subtype);
+            const status = ticket.status || 'valid';
+            const emailSent = ticket.email_sent ? 'Yes' : 'No';
             const created = new Date(ticket.created_at).toLocaleDateString();
-            const friCheckin = ticket.scans?.friday ? 'Yes' : 'No';
-            const satCheckin = ticket.scans?.saturday ? 'Yes' : 'No';
-            const sunCheckin = ticket.scans?.sunday ? 'Yes' : 'No';
-            csvContent += `${name},${email},"${subtype}",${created},${friCheckin},${satCheckin},${sunCheckin}\n`;
+            const scanned = ticket.scans?.scanned ? 'Yes' : 'No';
+            const scannedOn = ticket.scans?.scannedOn ? new Date(ticket.scans.scannedOn).toLocaleDateString() : '';
+            csvContent += `${name},${email},"${subtype}",${status},${emailSent},${created},${scanned},"${scannedOn}"\n`;
           });
         }
 
@@ -691,8 +693,8 @@ export default {
           return;
         }
 
-        // Post-Convention Report: All tickets with check-in times
-        let csvContent = 'Name,Email,Ticket Type,Created,Friday Check-in,Saturday Check-in,Sunday Check-in\n';
+        // Post-Convention Report: All tickets with comprehensive information
+        let csvContent = 'Name,Email,Ticket Type,Status,Email Sent,Booth Range,Booths,Created,Used,Scanned On\n';
         
         allTickets.forEach(ticket => {
           const name = `"${ticket.name}"`;
@@ -708,22 +710,17 @@ export default {
             ticketTypeStr = formatAttendeeSubtype(ticket.ticket_subtype);
           }
           
+          const status = ticket.status || 'valid';
+          const emailSent = ticket.email_sent ? 'Yes' : 'No';
+          const boothRange = ticket.booth_range ? `"${ticket.booth_range}"` : '';
+          const booths = ticket.ticket_type === 'exhibitor' ? (ticket.quantity || 1) : '';
           const created = new Date(ticket.created_at).toLocaleDateString();
+          const used = ticket.is_used ? 'Yes' : (ticket.scans?.scanned ? 'Yes' : 'No');
+          const scannedOn = ticket.scans?.scannedOn 
+            ? `"${new Date(ticket.scans.scannedOn).toLocaleString()}"` 
+            : (used === 'Yes' && ticket.used_at ? `"${new Date(ticket.used_at).toLocaleString()}"` : '""');
           
-          // Format check-in times or "Didn't Attend"
-          const friCheckin = ticket.scans?.fridayTime 
-            ? new Date(ticket.scans.fridayTime).toLocaleString()
-            : (ticket.ticket_type === 'attendee' && !canAttendDay(ticket.ticket_subtype, 'friday') ? 'N/A' : 'Didn\'t Attend');
-          
-          const satCheckin = ticket.scans?.saturdayTime 
-            ? new Date(ticket.scans.saturdayTime).toLocaleString()
-            : (ticket.ticket_type === 'attendee' && !canAttendDay(ticket.ticket_subtype, 'saturday') ? 'N/A' : 'Didn\'t Attend');
-          
-          const sunCheckin = ticket.scans?.sundayTime 
-            ? new Date(ticket.scans.sundayTime).toLocaleString()
-            : (ticket.ticket_type === 'attendee' && !canAttendDay(ticket.ticket_subtype, 'sunday') ? 'N/A' : 'Didn\'t Attend');
-          
-          csvContent += `${name},${email},"${ticketTypeStr}",${created},"${friCheckin}","${satCheckin}","${sunCheckin}"\n`;
+          csvContent += `${name},${email},"${ticketTypeStr}",${status},${emailSent},${boothRange},${booths},${created},${used},${scannedOn}\n`;
         });
 
         // Create and download the file
