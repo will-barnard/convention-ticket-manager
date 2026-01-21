@@ -4,11 +4,9 @@ const cors = require('cors');
 
 // Debug: Log all email-related environment variables on startup
 console.log('🔍 Environment Variables Check:');
-console.log('   SMTP_HOST:', process.env.SMTP_HOST || 'NOT SET');
-console.log('   SMTP_PORT:', process.env.SMTP_PORT || 'NOT SET');
-console.log('   SMTP_USER:', process.env.SMTP_USER || 'NOT SET');
-console.log('   SMTP_PASS:', process.env.SMTP_PASS ? `${process.env.SMTP_PASS.substring(0, 4)}**** (length: ${process.env.SMTP_PASS.length})` : 'NOT SET');
+console.log('   RESEND_API_KEY:', process.env.RESEND_API_KEY ? `${process.env.RESEND_API_KEY.substring(0, 8)}**** (length: ${process.env.RESEND_API_KEY.length})` : 'NOT SET');
 console.log('   EMAIL_FROM:', process.env.EMAIL_FROM || 'NOT SET');
+console.log('   ADMIN_EMAIL:', process.env.ADMIN_EMAIL || 'NOT SET');
 console.log('   FRONTEND_URL:', process.env.FRONTEND_URL || 'NOT SET');
 console.log('');
 const authRoutes = require('./routes/auth');

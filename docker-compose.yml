@@ -28,11 +28,8 @@ services:
       DATABASE_URL: postgresql://postgres:password@db:5432/convention_tickets
       JWT_SECRET: 884835668e869e6cb311ad8cdb2b3f859e1da04b579900f062eb13664bff8cfc
       JWT_EXPIRES_IN: 2y
-      SMTP_HOST: smtp.gmail.com
-      SMTP_PORT: 587
-      SMTP_USER: ${SMTP_USER:-chicagodrumshow@gmail.com}
-      SMTP_PASS: ${SMTP_PASS}
-      EMAIL_FROM: Chicago Drum Show <${SMTP_USER:-chicagodrumshow@gmail.com}>
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      EMAIL_FROM: ${EMAIL_FROM:-Chicago Drum Show <chicagodrumshow@gmail.com>}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-willbarnardmusic@gmail.com}
       SHOPIFY_API_KEY: ${SHOPIFY_API_KEY}
       FRONTEND_URL: http://localhost:49192

@@ -1,44 +1,28 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const db = require('../config/database');
 
 // Check if email is configured
-const isEmailConfigured = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS;
+const isEmailConfigured = process.env.RESEND_API_KEY;
 
-// Create transporter only if email is configured
-let transporter = null;
+// Create Resend client only if API key is configured
+let resend = null;
 if (isEmailConfigured) {
-  transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: process.env.SMTP_PORT,
-    secure: false, // true for 465, false for other ports
-    requireTLS: true, // Enable STARTTLS
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-    tls: {
-      rejectUnauthorized: false
-    }
-  });
+  resend = new Resend(process.env.RESEND_API_KEY);
 }
 
 // Send ticket email with QR code(s)
 async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherName, supplies, qrCodeDataUrl, verifyUrl, tickets }) {
   // Skip email if not configured
-  if (!isEmailConfigured || !transporter) {
+  if (!isEmailConfigured || !resend) {
     console.log('⚠️  Email not configured - skipping email send');
     console.log(`   Ticket would have been sent to: ${to}`);
     return { success: false, message: 'Email not configured' };
   }
 
   // Debug: Log email configuration
-  console.log('📧 Email Configuration:');
-  console.log('   SMTP_HOST:', process.env.SMTP_HOST);
-  console.log('   SMTP_PORT:', process.env.SMTP_PORT);
-  console.log('   SMTP_USER:', process.env.SMTP_USER);
-  console.log('   SMTP_PASS:', process.env.SMTP_PASS ? `${process.env.SMTP_PASS.substring(0, 4)}****` : 'NOT SET');
+  console.log('📧 Resend Email Configuration:');
+  console.log('   RESEND_API_KEY:', process.env.RESEND_API_KEY ? `${process.env.RESEND_API_KEY.substring(0, 8)}****` : 'NOT SET');
   console.log('   EMAIL_FROM:', process.env.EMAIL_FROM);
-  console.log('   EMAIL_FROM exact value:', JSON.stringify(process.env.EMAIL_FROM));
   console.log('   Sending to:', to);
   
   const ticketTypeLabels = {
@@ -72,12 +56,20 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
   // Handle consolidated email with multiple tickets
   if (tickets && Array.isArray(tickets) && tickets.length > 0) {
     let ticketsHtml = '';
+    const attachments = [];
     
     tickets.forEach((ticket, index) => {
       let ticketLabel = ticketTypeLabels[ticket.ticket_type] || 'Convention Ticket';
       if (ticket.ticket_type === 'attendee' && ticket.ticket_subtype) {
         ticketLabel = subtypeLabels[ticket.ticket_subtype] || ticketLabel;
       }
+      
+      // Prepare QR code attachment
+      const base64Data = ticket.qrCodeDataUrl.replace(/^data:image\/png;base64,/, '');
+      attachments.push({
+        filename: `qr-code-${index + 1}.png`,
+        content: base64Data
+      });
       
       ticketsHtml += `
         <div style="background: white; padding: 25px; border-radius: 8px; margin-bottom: 25px; border: 2px solid #ddd;">
@@ -94,7 +86,7 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
       `;
     });
 
-    const mailOptions = {
+    return resend.emails.send({
       from: process.env.EMAIL_FROM,
       to: to,
       subject: `Your ${conventionName} Tickets (${tickets.length} ${tickets.length === 1 ? 'Ticket' : 'Tickets'})`,
@@ -164,17 +156,8 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
         </body>
         </html>
       `,
-      attachments: tickets.map((ticket, index) => {
-        const base64Data = ticket.qrCodeDataUrl.replace(/^data:image\/png;base64,/, '');
-        return {
-          filename: `qr-code-${index + 1}.png`,
-          content: Buffer.from(base64Data, 'base64'),
-          cid: `qrcode${index}`
-        };
-      })
-    };
-
-    return transporter.sendMail(mailOptions);
+      attachments: attachments
+    });
   }
 
   // Handle single ticket email (backward compatibility for manual ticket creation)
@@ -205,9 +188,8 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
 
   // Convert base64 QR code to buffer for attachment
   const base64Data = qrCodeDataUrl.replace(/^data:image\/png;base64,/, '');
-  const qrCodeBuffer = Buffer.from(base64Data, 'base64');
 
-  const mailOptions = {
+  return resend.emails.send({
     from: process.env.EMAIL_FROM,
     to: to,
     subject: `Your ${ticketLabel}`,
@@ -296,28 +278,26 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
     attachments: [
       {
         filename: 'qrcode.png',
-        content: qrCodeBuffer,
-        cid: 'qrcode' // Same as the cid value in the img src
+        content: base64Data
       }
     ]
-  };
-
-  return transporter.sendMail(mailOptions);
+  });
 }
 
 // Send admin notification email
 async function sendAdminNotification({ subject, message, ticketDetails }) {
   // Skip if email not configured or admin email not set
-  if (!isEmailConfigured || !transporter || !process.env.ADMIN_EMAIL) {
+  if (!isEmailConfigured || !resend || !process.env.ADMIN_EMAIL) {
     console.log('⚠️  Admin notification skipped - email or admin email not configured');
     return { success: false, message: 'Email not configured' };
   }
 
-  const mailOptions = {
-    from: process.env.EMAIL_FROM,
-    to: process.env.ADMIN_EMAIL,
-    subject: `[Admin Alert] ${subject}`,
-    html: `
+  try {
+    await resend.emails.send({
+      from: process.env.EMAIL_FROM,
+      to: process.env.ADMIN_EMAIL,
+      subject: `[Admin Alert] ${subject}`,
+      html: `
       <!DOCTYPE html>
       <html>
       <head>
@@ -390,10 +370,7 @@ async function sendAdminNotification({ subject, message, ticketDetails }) {
       </body>
       </html>
     `,
-  };
-
-  try {
-    await transporter.sendMail(mailOptions);
+    });
     console.log(`✓ Admin notification sent to ${process.env.ADMIN_EMAIL}`);
     return { success: true };
   } catch (error) {
