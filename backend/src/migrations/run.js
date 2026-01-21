@@ -132,6 +132,20 @@ async function runMigrations() {
     `);
     console.log('✓ Booth range column ensured');
 
+    // Add quantity column for tickets
+    await db.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'tickets' AND column_name = 'quantity'
+        ) THEN
+          ALTER TABLE tickets ADD COLUMN quantity INTEGER DEFAULT 1;
+        END IF;
+      END $$;
+    `);
+    console.log('✓ Quantity column ensured');
+
     console.log('Migrations completed successfully!');
     process.exit(0);
   } catch (error) {

@@ -89,37 +89,52 @@
             </thead>
             <tbody>
               <template v-for="group in groupedTickets" :key="group.orderId">
-                <!-- Order Header Row -->
-                <tr class="order-row" :class="{ 'exhibitor-order': filterType === 'exhibitor' }" @click="filterType === 'exhibitor' ? null : toggleOrder(group.orderId)">
-                  <td colspan="2">
+                <!-- Order Header Row (or single exhibitor row) -->
+                <tr class="order-row" :class="{ 'exhibitor-single': filterType === 'exhibitor' }" @click="filterType === 'exhibitor' ? null : toggleOrder(group.orderId)">
+                  <td>
                     <div class="order-header">
                       <font-awesome-icon 
                         v-if="filterType !== 'exhibitor'"
                         :icon="isOrderExpanded(group.orderId) ? 'chevron-down' : 'chevron-right'" 
                         class="expand-icon"
                       />
-                      <span class="order-badge" v-if="group.isShopifyOrder">
-                        <font-awesome-icon icon="shopping-cart" />
-                        Order
+                      <span v-if="filterType !== 'exhibitor'" class="order-badge" :class="{ 'manual': !group.isShopifyOrder }">
+                        <font-awesome-icon :icon="group.isShopifyOrder ? 'shopping-cart' : 'hand-point-right'" />
+                        {{ group.isShopifyOrder ? 'Order' : 'Manual' }}
                       </span>
-                      <span class="order-badge manual" v-else>
-                        <font-awesome-icon icon="hand-point-right" />
-                        Manual
-                      </span>
-                      <strong>{{ group.customerName }}</strong>
-                      <span class="ticket-count" v-if="filterType === 'exhibitor'">
-                        ({{ group.tickets.length }} booth{{ group.tickets.length > 1 ? 's' : '' }})
-                      </span>
-                      <span class="ticket-count" v-else>
-                        ({{ group.tickets.length }} ticket{{ group.tickets.length > 1 ? 's' : '' }})
+                      <span v-else :class="['badge', 'exhibitor']">
+                        {{ formatTicketType('exhibitor') }}
                       </span>
                     </div>
+                  </td>
+                  <td>
+                    <strong>{{ group.customerName }}</strong>
+                    <span class="ticket-count" v-if="filterType === 'exhibitor'">
+                      ({{ group.tickets[0].quantity || 1 }} booth{{ (group.tickets[0].quantity || 1) > 1 ? 's' : '' }})
+                    </span>
                   </td>
                   <td v-if="filterType === 'student'"></td>
                   <td v-if="filterType === 'attendee'"></td>
                   <td>{{ group.customerEmail }}</td>
-                  <td v-if="filterType !== 'attendee'"></td>
-                  <td></td>
+                  <td v-if="filterType !== 'attendee'">
+                    <span v-if="filterType === 'exhibitor'" :class="['status', { used: group.tickets[0].is_used }]">
+                      {{ group.tickets[0].is_used ? 'Used' : 'Available' }}
+                    </span>
+                  </td>
+                  <td>
+                    <select 
+                      v-if="filterType === 'exhibitor'"
+                      :value="group.tickets[0].status || 'valid'" 
+                      @change="updateTicketStatus(group.tickets[0].id, $event.target.value)"
+                      :class="['status-select', group.tickets[0].status || 'valid']"
+                    >
+                      <option value="valid">✓ Valid</option>
+                      <option value="invalid">✗ Invalid</option>
+                      <option value="refunded">↩ Refunded</option>
+                      <option value="cancelled">✖ Cancelled</option>
+                      <option value="chargeback">⚠ Chargeback</option>
+                    </select>
+                  </td>
                   <td>{{ formatDate(group.tickets[0].created_at) }}</td>
                   <td>
                     <div class="order-actions">
@@ -255,15 +270,40 @@
             </div>
             <div class="info-row">
               <strong>Total Booths:</strong>
-              <span>{{ viewingExhibitorOrder.tickets.length }}</span>
+              <span>{{ viewingExhibitorOrder.tickets[0].quantity || 1 }}</span>
             </div>
             <div class="info-row">
               <strong>Booth Range:</strong>
               <span>{{ viewingExhibitorOrder.tickets[0].booth_range || 'Not specified' }}</span>
             </div>
             <div class="info-row">
-              <strong>Total Exhibitor Passes:</strong>
-              <span>{{ viewingExhibitorOrder.tickets.length * 2 }}</span>
+              <strong>Exhibitor Passes Included:</strong>
+              <span>{{ (viewingExhibitorOrder.tickets[0].quantity || 1) * 2 }}</span>
+            </div>
+            <div class="info-row">
+              <strong>Status:</strong>
+              <span :class="['status', { used: viewingExhibitorOrder.tickets[0].is_used }]">
+                {{ viewingExhibitorOrder.tickets[0].is_used ? 'Used' : 'Available' }}
+              </span>
+            </div>
+            <div class="info-row">
+              <strong>Validity:</strong>
+              <select 
+                :value="viewingExhibitorOrder.tickets[0].status || 'valid'" 
+                @change="updateTicketStatus(viewingExhibitorOrder.tickets[0].id, $event.target.value)"
+                :class="['status-select', viewingExhibitorOrder.tickets[0].status || 'valid']"
+              >
+                <option value="valid">✓ Valid</option>
+                <option value="invalid">✗ Invalid</option>
+                <option value="refunded">↩ Refunded</option>
+                <option value="cancelled">✖ Cancelled</option>
+                <option value="chargeback">⚠ Chargeback</option>
+              </select>
+            </div>
+            <div class="info-row">
+              <strong>Email Sent:</strong>
+              <span v-if="viewingExhibitorOrder.tickets[0].email_sent" class="email-sent">✓ Yes</span>
+              <span v-else class="email-not-sent">✗ Not yet</span>
             </div>
             <div class="info-row">
               <strong>Created:</strong>
@@ -289,58 +329,21 @@
             </table>
           </div>
 
-          <div class="tickets-section">
-            <h3>Individual Tickets ({{ viewingExhibitorOrder.tickets.length }})</h3>
-            <table class="tickets-detail-table">
-              <thead>
-                <tr>
-                  <th>UUID</th>
-                  <th>Status</th>
-                  <th>Email Sent</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="ticket in viewingExhibitorOrder.tickets" :key="ticket.id">
-                  <td><code>{{ ticket.uuid.substring(0, 8) }}...</code></td>
-                  <td>
-                    <select 
-                      :value="ticket.status || 'valid'" 
-                      @change="updateTicketStatus(ticket.id, $event.target.value)"
-                      :class="['status-select', ticket.status || 'valid']"
-                    >
-                      <option value="valid">✓ Valid</option>
-                      <option value="invalid">✗ Invalid</option>
-                      <option value="refunded">↩ Refunded</option>
-                      <option value="cancelled">✖ Cancelled</option>
-                      <option value="chargeback">⚠ Chargeback</option>
-                    </select>
-                  </td>
-                  <td>
-                    <span v-if="ticket.email_sent" class="email-sent">✓ Sent</span>
-                    <span v-else class="email-not-sent">✗ Not sent</span>
-                  </td>
-                  <td>
-                    <button 
-                      v-if="(authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin') && !ticket.email_sent" 
-                      @click="sendTicketEmail(ticket.id)" 
-                      class="btn-send-email-small"
-                    >
-                      Send
-                    </button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <div class="qr-section">
+            <h3>QR Code</h3>
+            <p class="qr-info">Single QR code for all {{ viewingExhibitorOrder.tickets[0].quantity || 1 }} booth{{ (viewingExhibitorOrder.tickets[0].quantity || 1) > 1 ? 's' : '' }}</p>
+            <div class="qr-code-display">
+              <code>{{ viewingExhibitorOrder.tickets[0].uuid }}</code>
+            </div>
           </div>
 
           <div class="modal-actions">
             <button 
-              v-if="(authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin') && viewingExhibitorOrder.tickets.some(t => !t.email_sent)"
-              @click="sendAllTicketsEmail(viewingExhibitorOrder)"
+              v-if="(authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin') && !viewingExhibitorOrder.tickets[0].email_sent"
+              @click="sendTicketEmail(viewingExhibitorOrder.tickets[0].id)"
               class="btn-primary"
             >
-              Send All Unsent Tickets ({{ viewingExhibitorOrder.tickets.filter(t => !t.email_sent).length }})
+              Send Ticket Email
             </button>
             <button @click="closeExhibitorModal" class="btn-secondary">
               Close
@@ -444,15 +447,8 @@ export default {
     );
 
     const exhibitorTickets = computed(() => {
-      // Count unique exhibitor orders, not individual tickets
-      const exhibitorOrders = new Set();
-      tickets.value
-        .filter(t => t.ticket_type === 'exhibitor')
-        .forEach(t => {
-          const orderId = t.shopify_order_id || `manual-${t.id}`;
-          exhibitorOrders.add(orderId);
-        });
-      return exhibitorOrders.size;
+      // Count individual exhibitor tickets (each is one exhibitor)
+      return tickets.value.filter(t => t.ticket_type === 'exhibitor').length;
     });
 
     const attendeeTickets = computed(() => 
@@ -482,6 +478,23 @@ export default {
     const groupedTickets = computed(() => {
       const groups = {};
       
+      // For exhibitor tickets, don't group - show individual tickets with quantity
+      if (filterType.value === 'exhibitor') {
+        return filteredTickets.value.map(ticket => ({
+          orderId: ticket.shopify_order_id || `manual-${ticket.id}`,
+          isShopifyOrder: !!ticket.shopify_order_id,
+          tickets: [ticket],
+          customerName: ticket.name,
+          customerEmail: ticket.email,
+          isSingleExhibitor: true
+        })).sort((a, b) => {
+          const aDate = new Date(a.tickets[0].created_at);
+          const bDate = new Date(b.tickets[0].created_at);
+          return bDate - aDate;
+        });
+      }
+      
+      // For other ticket types, group by order ID
       filteredTickets.value.forEach(ticket => {
         const orderId = ticket.shopify_order_id || `manual-${ticket.id}`;
         if (!groups[orderId]) {
