@@ -93,8 +93,11 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
           </h2>
           <div style="text-align: center; margin: 20px 0;">
             <img src="cid:qrcode${index}" style="max-width: 300px; border: 2px solid #ddd; padding: 10px; background: white;" alt="QR Code ${index + 1}"/>
+            <div style="background: #4CAF50; color: white; padding: 12px 20px; border-radius: 6px; display: inline-block; margin-top: 15px; font-weight: bold; font-size: 16px;">
+              ${ticketLabel}
+            </div>
           </div>
-          <p style="text-align: center; color: #666; font-size: 14px;">
+          <p style="text-align: center; color: #666; font-size: 14px; margin-top: 15px;">
             Scan this QR code at the entrance for check-in
           </p>
         </div>
@@ -307,6 +310,9 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
             <div class="qr-code">
               <p><strong>Your Ticket QR Code:</strong></p>
               <img src="cid:qrcode" alt="Ticket QR Code" />
+              <div style="background: #4CAF50; color: white; padding: 12px 20px; border-radius: 6px; display: inline-block; margin-top: 15px; font-weight: bold; font-size: 16px;">
+                ${ticketLabel}
+              </div>
               <p>Scan this QR code at the convention entrance</p>
             </div>
             
