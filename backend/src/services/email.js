@@ -70,7 +70,8 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
       const base64Data = ticket.qrCodeDataUrl.replace(/^data:image\/png;base64,/, '');
       attachments.push({
         filename: `qr-code-${index + 1}.png`,
-        content: base64Data
+        content: base64Data,
+        content_id: `qrcode${index}`
       });
       
       ticketsHtml += `
@@ -286,7 +287,8 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
     attachments: [
       {
         filename: 'qrcode.png',
-        content: base64Data
+        content: base64Data,
+        content_id: 'qrcode'
       }
     ]
   });
