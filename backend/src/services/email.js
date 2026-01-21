@@ -26,6 +26,8 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
   console.log('   RESEND_API_KEY:', process.env.RESEND_API_KEY ? `${process.env.RESEND_API_KEY.substring(0, 8)}****` : 'NOT SET');
   console.log('   EMAIL_FROM:', process.env.EMAIL_FROM);
   console.log('   Sending to:', to);
+  console.log('   Mode:', tickets ? `Multi-ticket (${tickets.length} tickets)` : 'Single-ticket');
+  console.log('   Single ticket params:', { ticketType, ticketSubtype });
   
   const ticketTypeLabels = {
     student: 'Student Ticket',
