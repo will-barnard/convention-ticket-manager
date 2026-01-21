@@ -1,5 +1,6 @@
 require('dotenv').config();
 const db = require('../config/database');
+const path = require('path');
 
 async function runMigrations() {
   try {
@@ -85,7 +86,23 @@ async function runMigrations() {
     `);
     console.log('✓ Indexes created');
 
-    // Update ticket status constraint to include 'cancelled'
+    // Run additional migrations inline to ensure they execute in order
+    
+    // Add status column and constraint
+    await db.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'tickets' AND column_name = 'status'
+        ) THEN
+          ALTER TABLE tickets ADD COLUMN status VARCHAR(50) DEFAULT 'valid';
+        END IF;
+      END $$;
+    `);
+    console.log('✓ Status column ensured');
+
+    // Update status constraint to include 'cancelled'
     await db.query(`
       DO $$
       BEGIN
@@ -95,14 +112,8 @@ async function runMigrations() {
         ) THEN
           ALTER TABLE tickets DROP CONSTRAINT valid_ticket_status;
         END IF;
-        
-        IF EXISTS (
-          SELECT 1 FROM information_schema.columns 
-          WHERE table_name = 'tickets' AND column_name = 'status'
-        ) THEN
-          ALTER TABLE tickets ADD CONSTRAINT valid_ticket_status 
-          CHECK (status IN ('valid', 'invalid', 'refunded', 'cancelled', 'chargeback'));
-        END IF;
+        ALTER TABLE tickets ADD CONSTRAINT valid_ticket_status 
+        CHECK (status IN ('valid', 'invalid', 'refunded', 'cancelled', 'chargeback'));
       END $$;
     `);
     console.log('✓ Ticket status constraint updated to include cancelled');
