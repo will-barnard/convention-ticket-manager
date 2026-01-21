@@ -75,6 +75,7 @@ router.post('/',
   body('email').isEmail(),
   body('teacherName').optional().trim(),
   body('supplies').optional().isArray(),
+  body('quantity').optional().isInt({ min: 1, max: 50 }),
   async (req, res) => {
     try {
       const errors = validationResult(req);
@@ -82,8 +83,8 @@ router.post('/',
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const { ticketType, ticketSubtype, name, teacherName, email, supplies } = req.body;
-      const ticketUuid = uuidv4();
+      const { ticketType, ticketSubtype, name, teacherName, email, supplies, quantity } = req.body;
+      const ticketQuantity = (ticketType === 'attendee' && quantity) ? quantity : 1;
 
       // Validate ticket_subtype for attendee tickets
       if (ticketType === 'attendee') {
@@ -118,57 +119,82 @@ router.post('/',
         return res.status(400).json({ error: 'Invalid ticket subtype' });
       }
 
-      // Generate verification URL
-      const verifyUrl = `${process.env.FRONTEND_URL}/verify/${ticketUuid}`;
-
-      // Generate QR code as data URL
-      const qrCodeDataUrl = await QRCode.toDataURL(verifyUrl);
-
-      // Save ticket to database
-      const result = await db.query(
-        'INSERT INTO tickets (ticket_type, ticket_subtype, name, teacher_name, email, uuid) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-        [ticketType, ticketSubtype || null, name, teacherName || null, email, ticketUuid]
-      );
-
-      const ticket = result.rows[0];
-
-      // Save supplies if this is an exhibitor ticket
-      if (ticketType === 'exhibitor' && supplies && supplies.length > 0) {
-        for (const supply of supplies) {
-          await db.query(
-            'INSERT INTO ticket_supplies (ticket_id, supply_name, quantity) VALUES ($1, $2, $3)',
-            [ticket.id, supply.name, supply.quantity || 1]
-          );
-        }
-      }
+      // Generate a manual order ID if creating multiple tickets
+      const manualOrderId = ticketQuantity > 1 ? `manual-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` : null;
 
       // Check if auto-send emails is enabled
       const settingsResult = await db.query('SELECT auto_send_emails FROM settings LIMIT 1');
       const autoSendEmails = settingsResult.rows.length > 0 ? settingsResult.rows[0].auto_send_emails : true;
 
-      // Send email with QR code if auto-send is enabled
-      let emailSent = false;
+      const createdTickets = [];
       let emailError = null;
+
+      // Create tickets (one or multiple)
+      for (let i = 0; i < ticketQuantity; i++) {
+        const ticketUuid = uuidv4();
+        const verifyUrl = `${process.env.FRONTEND_URL}/verify/${ticketUuid}`;
+
+        // Save ticket to database
+        const result = await db.query(
+          'INSERT INTO tickets (ticket_type, ticket_subtype, name, teacher_name, email, uuid, shopify_order_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+          [ticketType, ticketSubtype || null, name, teacherName || null, email, ticketUuid, manualOrderId]
+        );
+
+        const ticket = result.rows[0];
+
+        // Save supplies if this is an exhibitor ticket (only for first ticket if multiple)
+        if (i === 0 && ticketType === 'exhibitor' && supplies && supplies.length > 0) {
+          for (const supply of supplies) {
+            await db.query(
+              'INSERT INTO ticket_supplies (ticket_id, supply_name, quantity) VALUES ($1, $2, $3)',
+              [ticket.id, supply.name, supply.quantity || 1]
+            );
+          }
+        }
+
+        // Generate QR code
+        const qrCodeDataUrl = await QRCode.toDataURL(verifyUrl);
+        
+        createdTickets.push({
+          ...ticket,
+          qrCodeDataUrl,
+          verifyUrl
+        });
+      }
+
+      // Send email with QR code(s) if auto-send is enabled
+      let emailSent = false;
       
       if (autoSendEmails) {
         try {
-          await emailService.sendTicketEmail({
-            to: email,
-            name: name,
-            ticketType: ticketType,
-            ticketSubtype: ticketSubtype,
-            teacherName: teacherName,
-            supplies: supplies,
-            qrCodeDataUrl: qrCodeDataUrl,
-            verifyUrl: verifyUrl,
-          });
+          if (ticketQuantity > 1) {
+            // Send consolidated email for multiple tickets
+            await emailService.sendTicketEmail({
+              to: email,
+              name: name,
+              tickets: createdTickets
+            });
+          } else {
+            // Send single ticket email
+            await emailService.sendTicketEmail({
+              to: email,
+              name: name,
+              ticketType: ticketType,
+              ticketSubtype: ticketSubtype,
+              teacherName: teacherName,
+              supplies: supplies,
+              qrCodeDataUrl: createdTickets[0].qrCodeDataUrl,
+              verifyUrl: createdTickets[0].verifyUrl,
+            });
+          }
           
           emailSent = true;
           
-          // Update ticket to mark email as sent
+          // Update all tickets to mark email as sent
+          const ticketIds = createdTickets.map(t => t.id);
           await db.query(
-            'UPDATE tickets SET email_sent = true, email_sent_at = NOW() WHERE id = $1',
-            [ticket.id]
+            'UPDATE tickets SET email_sent = true, email_sent_at = NOW() WHERE id = ANY($1)',
+            [ticketIds]
           );
         } catch (emailErr) {
           console.error('Error sending email:', emailErr);
@@ -183,7 +209,7 @@ router.post('/',
                 recipientEmail: email,
                 recipientName: name,
                 ticketType: `${ticketType}${ticketSubtype ? ` (${ticketSubtype})` : ''}`,
-                ticketId: ticket.id,
+                ticketCount: ticketQuantity,
                 error: emailErr.message || 'Unknown error'
               }
             });
@@ -194,24 +220,21 @@ router.post('/',
         }
       }
 
+      const responseMessage = autoSendEmails 
+        ? (emailSent ? `${ticketQuantity} ticket(s) created and sent successfully` : `${ticketQuantity} ticket(s) created but email delivery failed`)
+        : `${ticketQuantity} ticket(s) created successfully (email sending disabled)`;
+
       res.status(201).json({
-        message: autoSendEmails 
-          ? (emailSent ? 'Ticket created and sent successfully' : 'Ticket created but email delivery failed')
-          : 'Ticket created successfully (email sending disabled)',
-        ticket: {
-          id: ticket.id,
-          ticket_type: ticket.ticket_type,
-          ticket_subtype: ticket.ticket_subtype,
-          name: ticket.name,
-          teacher_name: ticket.teacher_name,
-          email: ticket.email,
-          uuid: ticket.uuid,
-          is_used: ticket.is_used,
-          created_at: ticket.created_at,
-          supplies: supplies || null,
-          email_sent: emailSent,
-        },
-        warning: emailError,
+        message: responseMessage,
+        ticketCount: ticketQuantity,
+        tickets: createdTickets.map(t => ({
+          id: t.id,
+          ticket_type: t.ticket_type,
+          ticket_subtype: t.ticket_subtype,
+          uuid: t.uuid,
+          email_sent: emailSent
+        })),
+        warning: emailError ? 'Email delivery failed' : null
       });
     } catch (error) {
       console.error('Error creating ticket:', error);

@@ -86,6 +86,20 @@
             />
           </div>
 
+          <!-- Quantity for Attendee Tickets -->
+          <div v-if="formData.ticketType === 'attendee'" class="form-group">
+            <label for="quantity">Quantity</label>
+            <input
+              id="quantity"
+              v-model.number="formData.quantity"
+              type="number"
+              min="1"
+              max="50"
+              placeholder="Number of tickets"
+            />
+            <p class="hint">Create multiple tickets for the same person (all will be sent in one email)</p>
+          </div>
+
           <!-- Exhibitor Supplies Section -->
           <div v-if="formData.ticketType === 'exhibitor'" class="supplies-section">
             <h3>Supplies Provided</h3>
@@ -170,6 +184,7 @@ export default {
       name: '',
       teacherName: '',
       email: '',
+      quantity: 1,
       supplies: [{ name: '', quantity: 1 }],
     });
 
@@ -209,6 +224,7 @@ export default {
       }
       if (formData.ticketType !== 'attendee') {
         formData.ticketSubtype = '';
+        formData.quantity = 1;
       }
     };
 
@@ -240,6 +256,7 @@ export default {
 
         if (formData.ticketType === 'attendee') {
           payload.ticketSubtype = formData.ticketSubtype;
+          payload.quantity = formData.quantity || 1;
         }
 
         if (formData.ticketType === 'exhibitor') {
@@ -249,10 +266,11 @@ export default {
 
         const response = await axios.post('/api/tickets', payload);
         
+        const ticketCount = response.data.ticketCount || 1;
         if (response.data.warning) {
-          success.value = 'Ticket created successfully, but email delivery failed. Please check email configuration.';
+          success.value = `${ticketCount} ticket(s) created successfully, but email delivery failed. Please check email configuration.`;
         } else {
-          success.value = 'Ticket created and sent successfully!';
+          success.value = `${ticketCount} ticket(s) created and sent successfully!`;
         }
 
         // Reset form after success
@@ -274,6 +292,7 @@ export default {
       formData.name = '';
       formData.teacherName = '';
       formData.email = '';
+      formData.quantity = 1;
       formData.supplies = [{ name: '', quantity: 1 }];
       error.value = '';
       success.value = '';
