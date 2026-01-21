@@ -42,15 +42,17 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
     cymbal_summit: 'Indie Cymbalsmith Event Ticket (Friday Only)'
   };
 
-  // Fetch convention name from settings
+  // Fetch convention name and logo from settings
   let conventionName = 'Convention';
+  let logoUrl = null;
   try {
-    const settingsResult = await db.query('SELECT convention_name FROM settings LIMIT 1');
+    const settingsResult = await db.query('SELECT convention_name, logo_url FROM settings LIMIT 1');
     if (settingsResult.rows.length > 0) {
       conventionName = settingsResult.rows[0].convention_name;
+      logoUrl = settingsResult.rows[0].logo_url;
     }
   } catch (error) {
-    console.log('Note: Could not fetch convention name from settings, using default');
+    console.log('Note: Could not fetch convention settings, using defaults');
   }
 
   // Handle consolidated email with multiple tickets
@@ -129,8 +131,11 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
         </head>
         <body>
           <div class="container">
+            ${logoUrl ? `<div style="text-align: center; padding: 20px 0; background-color: white;">
+              <img src="${process.env.FRONTEND_URL}${logoUrl}" alt="${conventionName}" style="max-width: 100%; max-height: 150px; object-fit: contain;" />
+            </div>` : ''}
             <div class="header">
-              <h1 style="margin: 0;">🎫 Your ${conventionName} Tickets</h1>
+              <h1 style="margin: 0;">Your ${conventionName} Tickets</h1>
             </div>
             <div class="content">
               <p>Hello ${name},</p>
@@ -140,7 +145,7 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
               ${ticketsHtml}
 
               <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 5px; margin-top: 20px;">
-                <p style="margin: 0;"><strong>⚠️ Please Note:</strong></p>
+                <p style="margin: 0;"><strong>Please Note:</strong></p>
                 <ul style="margin: 10px 0;">
                   <li>Each QR code can only be scanned once</li>
                   <li>Keep this email safe - you'll need it at the entrance</li>
@@ -247,6 +252,9 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
       </head>
       <body>
         <div class="container">
+          ${logoUrl ? `<div style="text-align: center; padding: 20px 0; background-color: white;">
+            <img src="${process.env.FRONTEND_URL}${logoUrl}" alt="${conventionName}" style="max-width: 100%; max-height: 150px; object-fit: contain;" />
+          </div>` : ''}
           <div class="header">
             <h1>${ticketLabel}</h1>
           </div>
