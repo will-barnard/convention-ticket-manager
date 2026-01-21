@@ -564,8 +564,8 @@ router.post('/:id/send-email', authMiddleware, superAdminMiddleware, async (req,
       tickets: [{
         uuid: ticket.uuid,
         qrCodeDataUrl: qrCodeDataUrl,
-        type: ticket.ticket_type,
-        subtype: ticket.ticket_subtype,
+        ticket_type: ticket.ticket_type,
+        ticket_subtype: ticket.ticket_subtype,
         teacherName: ticket.teacher_name
       }]
     });
