@@ -243,6 +243,161 @@ router.post('/',
   }
 );
 
+// Create order with multiple tickets of different types (protected)
+router.post('/create-order',
+  authMiddleware,
+  checkLockdown,
+  body('customerName').trim().notEmpty(),
+  body('email').isEmail(),
+  body('tickets').isArray({ min: 1 }),
+  body('tickets.*.ticketType').isIn(['student', 'exhibitor', 'attendee']),
+  body('tickets.*.name').trim().notEmpty(),
+  body('tickets.*.quantity').isInt({ min: 1, max: 50 }),
+  body('tickets.*.teacherName').optional().trim(),
+  body('tickets.*.ticketSubtype').optional().trim(),
+  body('tickets.*.supplies').optional().isArray(),
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const { customerName, email, tickets: ticketItems } = req.body;
+
+      // Validate each ticket based on its type
+      for (const ticketItem of ticketItems) {
+        if (ticketItem.ticketType === 'student' && !ticketItem.teacherName) {
+          return res.status(400).json({ error: 'Teacher name is required for student tickets' });
+        }
+
+        if (ticketItem.ticketType === 'attendee') {
+          const validSubtypes = ['vip', 'adult_2day', 'adult_saturday', 'adult_sunday', 'child_2day', 'child_saturday', 'child_sunday', 'cymbal_summit'];
+          if (!ticketItem.ticketSubtype || !validSubtypes.includes(ticketItem.ticketSubtype)) {
+            return res.status(400).json({ error: 'Valid ticket_subtype is required for attendee tickets' });
+          }
+        }
+      }
+
+      // Generate a single manual order ID for all tickets in this order
+      const manualOrderId = `manual-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+      // Check if auto-send emails is enabled
+      const settingsResult = await db.query('SELECT auto_send_emails FROM settings LIMIT 1');
+      const autoSendEmails = settingsResult.rows.length > 0 ? settingsResult.rows[0].auto_send_emails : true;
+
+      const createdTickets = [];
+      let emailError = null;
+
+      // Create all tickets
+      for (const ticketItem of ticketItems) {
+        const { ticketType, ticketSubtype, name, teacherName, quantity, supplies } = ticketItem;
+        const ticketQuantity = quantity || 1;
+
+        // Create multiple instances of this ticket type
+        for (let i = 0; i < ticketQuantity; i++) {
+          const ticketUuid = uuidv4();
+          const verifyUrl = `${process.env.FRONTEND_URL}/verify/${ticketUuid}`;
+
+          // Save ticket to database
+          const result = await db.query(
+            'INSERT INTO tickets (ticket_type, ticket_subtype, name, teacher_name, email, uuid, shopify_order_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+            [ticketType, ticketSubtype || null, name, teacherName || null, email, ticketUuid, manualOrderId]
+          );
+
+          const ticket = result.rows[0];
+
+          // Save supplies if this is an exhibitor ticket
+          if (ticketType === 'exhibitor' && supplies && supplies.length > 0) {
+            for (const supply of supplies) {
+              if (supply.name && supply.name.trim()) {
+                await db.query(
+                  'INSERT INTO ticket_supplies (ticket_id, supply_name, quantity) VALUES ($1, $2, $3)',
+                  [ticket.id, supply.name, supply.quantity || 1]
+                );
+              }
+            }
+          }
+
+          // Generate QR code
+          const qrCodeDataUrl = await QRCode.toDataURL(verifyUrl);
+          
+          createdTickets.push({
+            ...ticket,
+            qrCodeDataUrl,
+            verifyUrl
+          });
+        }
+      }
+
+      // Send consolidated email with all QR codes if auto-send is enabled
+      let emailSent = false;
+      
+      if (autoSendEmails) {
+        try {
+          await emailService.sendTicketEmail({
+            to: email,
+            name: customerName,
+            tickets: createdTickets
+          });
+          
+          emailSent = true;
+          
+          // Update all tickets to mark email as sent
+          const ticketIds = createdTickets.map(t => t.id);
+          await db.query(
+            'UPDATE tickets SET email_sent = true, email_sent_at = NOW() WHERE id = ANY($1)',
+            [ticketIds]
+          );
+        } catch (emailErr) {
+          console.error('Error sending email:', emailErr);
+          emailError = 'Email could not be sent';
+          
+          // Send admin notification about the bounce/failure
+          try {
+            await emailService.sendAdminNotification({
+              subject: 'Email Delivery Failure',
+              message: 'A ticket email failed to send. The recipient may have an invalid email address or the email server rejected the message.',
+              ticketDetails: {
+                recipientEmail: email,
+                recipientName: customerName,
+                ticketCount: createdTickets.length,
+                orderType: 'Mixed ticket types',
+                error: emailErr.message || 'Unknown error'
+              }
+            });
+            console.log('Admin notified of email failure');
+          } catch (notificationErr) {
+            console.error('Failed to send admin notification:', notificationErr);
+          }
+        }
+      }
+
+      const totalTickets = createdTickets.length;
+      const responseMessage = autoSendEmails 
+        ? (emailSent ? `Order created with ${totalTickets} ticket(s) and sent successfully` : `Order created with ${totalTickets} ticket(s) but email delivery failed`)
+        : `Order created with ${totalTickets} ticket(s) (email sending disabled)`;
+
+      res.status(201).json({
+        message: responseMessage,
+        ticketCount: totalTickets,
+        orderId: manualOrderId,
+        tickets: createdTickets.map(t => ({
+          id: t.id,
+          ticket_type: t.ticket_type,
+          ticket_subtype: t.ticket_subtype,
+          uuid: t.uuid,
+          email_sent: emailSent
+        })),
+        warning: emailError ? 'Email delivery failed' : null
+      });
+    } catch (error) {
+      console.error('Error creating order:', error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  }
+);
+
 // Reset database - Delete all tickets (SuperAdmin only) - MUST come before /:id route
 router.delete('/reset-database', superAdminMiddleware, async (req, res) => {
   try {

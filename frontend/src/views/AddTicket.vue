@@ -1,139 +1,154 @@
 <template>
   <div class="add-ticket">
     <header class="header">
-      <h1>Add New Ticket</h1>
+      <h1>Create Ticket Order</h1>
       <button @click="goBack" class="btn-secondary">Back to Tickets</button>
     </header>
 
     <div class="container">
-      <div class="ticket-type-tabs">
-        <button
-          type="button"
-          @click="formData.ticketType = 'attendee'; onTicketTypeChange()"
-          :class="['tab-btn', { active: formData.ticketType === 'attendee' }]"
-        >
-          <font-awesome-icon icon="ticket" /> Attendee Ticket
-        </button>
-        <button
-          type="button"
-          @click="formData.ticketType = 'exhibitor'; onTicketTypeChange()"
-          :class="['tab-btn', { active: formData.ticketType === 'exhibitor' }]"
-        >
-          <font-awesome-icon icon="building" /> Exhibitor Ticket
-        </button>
-        <button
-          type="button"
-          @click="formData.ticketType = 'student'; onTicketTypeChange()"
-          :class="['tab-btn', { active: formData.ticketType === 'student' }]"
-        >
-          <font-awesome-icon icon="graduation-cap" /> Student Ticket
-        </button>
-      </div>
-
       <div class="form-card">
-        <h2>{{ ticketTypeTitle }}</h2>
+        <h2>Order Information</h2>
         <form @submit.prevent="handleSubmit">
-
+          
           <div class="form-group">
-            <label for="name">Name *</label>
+            <label for="customerName">Customer Name *</label>
             <input
-              id="name"
-              v-model="formData.name"
+              id="customerName"
+              v-model="orderData.customerName"
               type="text"
               required
-              :placeholder="namePlaceholder"
+              placeholder="Enter customer name"
             />
-          </div>
-
-          <div v-if="formData.ticketType === 'student'" class="form-group">
-            <label for="teacherName">Teacher Name *</label>
-            <input
-              id="teacherName"
-              v-model="formData.teacherName"
-              type="text"
-              :required="formData.ticketType === 'student'"
-              placeholder="Enter teacher name"
-            />
-          </div>
-
-          <div v-if="formData.ticketType === 'attendee'" class="form-group">
-            <label for="ticketSubtype">Ticket Type *</label>
-            <select
-              id="ticketSubtype"
-              v-model="formData.ticketSubtype"
-              required
-            >
-              <option value="">Select ticket type</option>
-              <option value="vip">VIP (Friday, Saturday, Sunday)</option>
-              <option value="adult_2day">Adult 2-Day Pass (Saturday, Sunday)</option>
-              <option value="adult_saturday">Adult 1-Day Pass (Saturday)</option>
-              <option value="adult_sunday">Adult 1-Day Pass (Sunday)</option>
-              <option value="child_2day">Child 2-Day Pass (Saturday, Sunday)</option>
-              <option value="child_saturday">Child 1-Day Pass (Saturday)</option>
-              <option value="child_sunday">Child 1-Day Pass (Sunday)</option>
-              <option value="cymbal_summit">Indie Cymbalsmith Event Ticket (Friday Only)</option>
-            </select>
           </div>
 
           <div class="form-group">
             <label for="email">Email Address *</label>
             <input
               id="email"
-              v-model="formData.email"
+              v-model="orderData.email"
               type="email"
               required
               placeholder="Enter email address"
             />
+            <p class="hint">All tickets will be sent to this email</p>
           </div>
 
-          <!-- Quantity for Attendee Tickets -->
-          <div v-if="formData.ticketType === 'attendee'" class="form-group">
-            <label for="quantity">Quantity</label>
-            <input
-              id="quantity"
-              v-model.number="formData.quantity"
-              type="number"
-              min="1"
-              max="50"
-              placeholder="Number of tickets"
-            />
-            <p class="hint">Create multiple tickets for the same person (all will be sent in one email)</p>
-          </div>
-
-          <!-- Exhibitor Supplies Section -->
-          <div v-if="formData.ticketType === 'exhibitor'" class="supplies-section">
-            <h3>Supplies Provided</h3>
-            <div v-for="(supply, index) in formData.supplies" :key="index" class="supply-item">
-              <div class="supply-fields">
-                <input
-                  v-model="supply.name"
-                  type="text"
-                  placeholder="Supply name"
-                  required
-                />
-                <input
-                  v-model.number="supply.quantity"
-                  type="number"
-                  min="1"
-                  placeholder="Qty"
-                  required
-                />
+          <div class="tickets-section">
+            <h3>Tickets in Order</h3>
+            
+            <div v-for="(ticket, index) in orderData.tickets" :key="index" class="ticket-line">
+              <div class="ticket-line-header">
+                <h4>Ticket {{ index + 1 }}</h4>
                 <button
                   type="button"
-                  @click="removeSupply(index)"
-                  class="btn-remove"
-                  :disabled="formData.supplies.length === 1"
+                  @click="removeTicket(index)"
+                  class="btn-remove-ticket"
+                  :disabled="orderData.tickets.length === 1"
+                  title="Remove ticket"
                 >
-                  ✕
+                  ✕ Remove
                 </button>
               </div>
+
+              <div class="ticket-fields">
+                <div class="form-group">
+                  <label>Type *</label>
+                  <select v-model="ticket.ticketType" @change="onTicketTypeChange(index)" required>
+                    <option value="attendee">Attendee</option>
+                    <option value="exhibitor">Exhibitor</option>
+                    <option value="student">Student</option>
+                  </select>
+                </div>
+
+                <div v-if="ticket.ticketType === 'attendee'" class="form-group">
+                  <label>Subtype *</label>
+                  <select v-model="ticket.ticketSubtype" required>
+                    <option value="">Select subtype</option>
+                    <option value="vip">VIP</option>
+                    <option value="adult_2day">Adult 2-Day</option>
+                    <option value="adult_saturday">Adult Saturday</option>
+                    <option value="adult_sunday">Adult Sunday</option>
+                    <option value="child_2day">Child 2-Day</option>
+                    <option value="child_saturday">Child Saturday</option>
+                    <option value="child_sunday">Child Sunday</option>
+                    <option value="cymbal_summit">Cymbal Summit</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label>Name *</label>
+                  <input
+                    v-model="ticket.name"
+                    type="text"
+                    required
+                    :placeholder="getNamePlaceholder(ticket.ticketType)"
+                  />
+                </div>
+
+                <div v-if="ticket.ticketType === 'student'" class="form-group">
+                  <label>Teacher Name *</label>
+                  <input
+                    v-model="ticket.teacherName"
+                    type="text"
+                    required
+                    placeholder="Enter teacher name"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label>Quantity *</label>
+                  <input
+                    v-model.number="ticket.quantity"
+                    type="number"
+                    min="1"
+                    max="50"
+                    required
+                  />
+                </div>
+
+                <!-- Exhibitor Supplies Section -->
+                <div v-if="ticket.ticketType === 'exhibitor'" class="supplies-subsection">
+                  <label>Supplies Provided</label>
+                  <div v-for="(supply, supplyIndex) in ticket.supplies" :key="supplyIndex" class="supply-item">
+                    <input
+                      v-model="supply.name"
+                      type="text"
+                      placeholder="Supply name"
+                      required
+                    />
+                    <input
+                      v-model.number="supply.quantity"
+                      type="number"
+                      min="1"
+                      placeholder="Qty"
+                      required
+                    />
+                    <button
+                      type="button"
+                      @click="removeSupply(index, supplyIndex)"
+                      class="btn-remove-small"
+                      :disabled="ticket.supplies.length === 1"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    @click="addSupply(index)"
+                    class="btn-add-supply-small"
+                  >
+                    + Add Supply
+                  </button>
+                </div>
+              </div>
             </div>
+
             <button
               type="button"
-              @click="addSupply"
-              class="btn-add-supply"
+              @click="addTicket"
+              class="btn-add-ticket"
             >
-              + Add Supply
+              + Add Another Ticket
             </button>
           </div>
 
@@ -151,7 +166,7 @@
               class="btn-primary"
               :disabled="loading"
             >
-              {{ loading ? 'Creating Ticket...' : 'Create & Send Ticket' }}
+              {{ loading ? 'Creating Order...' : `Create Order (${totalTickets} ticket${totalTickets > 1 ? 's' : ''})` }}
             </button>
             <button
               type="button"
@@ -178,63 +193,74 @@ export default {
   setup() {
     const router = useRouter();
 
-    const formData = reactive({
-      ticketType: 'attendee',
-      ticketSubtype: '',
-      name: '',
-      teacherName: '',
+    const orderData = reactive({
+      customerName: '',
       email: '',
-      quantity: 1,
-      supplies: [{ name: '', quantity: 1 }],
+      tickets: [{
+        ticketType: 'attendee',
+        ticketSubtype: '',
+        name: '',
+        teacherName: '',
+        quantity: 1,
+        supplies: [{ name: '', quantity: 1 }]
+      }]
     });
 
     const loading = ref(false);
     const error = ref('');
     const success = ref('');
 
-    const ticketTypeTitle = computed(() => {
-      const titles = {
-        student: 'Student Ticket',
-        exhibitor: 'Exhibitor Ticket',
-        attendee: 'Attendee Ticket'
-      };
-      return titles[formData.ticketType] || '';
+    const totalTickets = computed(() => {
+      return orderData.tickets.reduce((sum, ticket) => sum + (ticket.quantity || 0), 0);
     });
 
-    const namePlaceholder = computed(() => {
-      switch (formData.ticketType) {
-        case 'student':
-          return 'Enter student name';
-        case 'exhibitor':
-          return 'Enter exhibitor/company name';
-        case 'attendee':
-          return 'Enter attendee name';
-        default:
-          return 'Enter name';
-      }
-    });
-
-    const onTicketTypeChange = () => {
-      // Reset conditional fields
-      if (formData.ticketType !== 'student') {
-        formData.teacherName = '';
-      }
-      if (formData.ticketType !== 'exhibitor') {
-        formData.supplies = [{ name: '', quantity: 1 }];
-      }
-      if (formData.ticketType !== 'attendee') {
-        formData.ticketSubtype = '';
-        formData.quantity = 1;
+    const getNamePlaceholder = (ticketType) => {
+      switch (ticketType) {
+        case 'student': return 'Student name';
+        case 'exhibitor': return 'Exhibitor/company name';
+        case 'attendee': return 'Attendee name';
+        default: return 'Enter name';
       }
     };
 
-    const addSupply = () => {
-      formData.supplies.push({ name: '', quantity: 1 });
+    const onTicketTypeChange = (index) => {
+      const ticket = orderData.tickets[index];
+      // Reset type-specific fields
+      if (ticket.ticketType !== 'student') {
+        ticket.teacherName = '';
+      }
+      if (ticket.ticketType !== 'exhibitor') {
+        ticket.supplies = [{ name: '', quantity: 1 }];
+      }
+      if (ticket.ticketType !== 'attendee') {
+        ticket.ticketSubtype = '';
+      }
     };
 
-    const removeSupply = (index) => {
-      if (formData.supplies.length > 1) {
-        formData.supplies.splice(index, 1);
+    const addTicket = () => {
+      orderData.tickets.push({
+        ticketType: 'attendee',
+        ticketSubtype: '',
+        name: '',
+        teacherName: '',
+        quantity: 1,
+        supplies: [{ name: '', quantity: 1 }]
+      });
+    };
+
+    const removeTicket = (index) => {
+      if (orderData.tickets.length > 1) {
+        orderData.tickets.splice(index, 1);
+      }
+    };
+
+    const addSupply = (ticketIndex) => {
+      orderData.tickets[ticketIndex].supplies.push({ name: '', quantity: 1 });
+    };
+
+    const removeSupply = (ticketIndex, supplyIndex) => {
+      if (orderData.tickets[ticketIndex].supplies.length > 1) {
+        orderData.tickets[ticketIndex].supplies.splice(supplyIndex, 1);
       }
     };
 
@@ -245,55 +271,64 @@ export default {
 
       try {
         const payload = {
-          ticketType: formData.ticketType,
-          name: formData.name,
-          email: formData.email,
+          customerName: orderData.customerName,
+          email: orderData.email,
+          tickets: orderData.tickets.map(ticket => {
+            const t = {
+              ticketType: ticket.ticketType,
+              name: ticket.name,
+              quantity: ticket.quantity
+            };
+
+            if (ticket.ticketType === 'student') {
+              t.teacherName = ticket.teacherName;
+            }
+
+            if (ticket.ticketType === 'attendee') {
+              t.ticketSubtype = ticket.ticketSubtype;
+            }
+
+            if (ticket.ticketType === 'exhibitor') {
+              t.supplies = ticket.supplies.filter(s => s.name.trim() !== '');
+            }
+
+            return t;
+          })
         };
 
-        if (formData.ticketType === 'student') {
-          payload.teacherName = formData.teacherName;
-        }
-
-        if (formData.ticketType === 'attendee') {
-          payload.ticketSubtype = formData.ticketSubtype;
-          payload.quantity = formData.quantity || 1;
-        }
-
-        if (formData.ticketType === 'exhibitor') {
-          // Filter out empty supplies
-          payload.supplies = formData.supplies.filter(s => s.name.trim() !== '');
-        }
-
-        const response = await axios.post('/api/tickets', payload);
+        const response = await axios.post('/api/tickets/create-order', payload);
         
-        const ticketCount = response.data.ticketCount || 1;
+        const ticketCount = response.data.ticketCount || totalTickets.value;
         if (response.data.warning) {
-          success.value = `${ticketCount} ticket(s) created successfully, but email delivery failed. Please check email configuration.`;
+          success.value = `Order created with ${ticketCount} ticket(s), but email delivery failed. Please check email configuration.`;
         } else {
-          success.value = `${ticketCount} ticket(s) created and sent successfully!`;
+          success.value = `Order created successfully with ${ticketCount} ticket(s) and sent to ${orderData.email}!`;
         }
 
         // Reset form after success
         setTimeout(() => {
           resetForm();
-          router.push('/');
+          router.push('/tickets');
         }, 2000);
       } catch (err) {
-        error.value = err.response?.data?.error || 'Failed to create ticket';
-        console.error('Error creating ticket:', err);
+        error.value = err.response?.data?.error || 'Failed to create order';
+        console.error('Error creating order:', err);
       } finally {
         loading.value = false;
       }
     };
 
     const resetForm = () => {
-      formData.ticketType = 'student';
-      formData.ticketSubtype = '';
-      formData.name = '';
-      formData.teacherName = '';
-      formData.email = '';
-      formData.quantity = 1;
-      formData.supplies = [{ name: '', quantity: 1 }];
+      orderData.customerName = '';
+      orderData.email = '';
+      orderData.tickets = [{
+        ticketType: 'attendee',
+        ticketSubtype: '',
+        name: '',
+        teacherName: '',
+        quantity: 1,
+        supplies: [{ name: '', quantity: 1 }]
+      }];
       error.value = '';
       success.value = '';
     };
@@ -303,14 +338,16 @@ export default {
     };
 
     return {
-      formData,
+      orderData,
       loading,
       error,
       success,
-      ticketTypeTitle,
-      namePlaceholder,
+      totalTickets,
+      getNamePlaceholder,
       handleSubmit,
       onTicketTypeChange,
+      addTicket,
+      removeTicket,
       addSupply,
       removeSupply,
       resetForm,
@@ -342,48 +379,9 @@ export default {
 }
 
 .container {
-  max-width: 800px;
+  max-width: 900px;
   margin: 0 auto;
   padding: 40px 20px;
-}
-
-.ticket-type-tabs {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 30px;
-  background: white;
-  padding: 10px;
-  border-radius: 10px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.tab-btn {
-  flex: 1;
-  padding: 15px 20px;
-  border: 2px solid #e0e0e0;
-  background: white;
-  color: #666;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 16px;
-  font-weight: 500;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-.tab-btn:hover {
-  border-color: #667eea;
-  color: #667eea;
-  background: #f8f9ff;
-}
-
-.tab-btn.active {
-  background: #667eea;
-  color: white;
-  border-color: #667eea;
 }
 
 .form-card {
@@ -401,87 +399,6 @@ export default {
   border-bottom: 2px solid #f0f0f0;
 }
 
-select {
-  width: 100%;
-  padding: 12px;
-  border: 1px solid #ddd;
-  border-radius: 5px;
-  font-size: 16px;
-  box-sizing: border-box;
-  background-color: white;
-}
-
-select:focus {
-  outline: none;
-  border-color: #667eea;
-}
-
-.supplies-section {
-  margin: 30px 0;
-  padding: 20px;
-  background: #f8f9fa;
-  border-radius: 5px;
-}
-
-.supplies-section h3 {
-  margin-top: 0;
-  margin-bottom: 15px;
-  color: #333;
-  font-size: 18px;
-}
-
-.supply-item {
-  margin-bottom: 10px;
-}
-
-.supply-fields {
-  display: flex;
-  gap: 10px;
-}
-
-.supply-fields input[type="text"] {
-  flex: 2;
-}
-
-.supply-fields input[type="number"] {
-  flex: 0 0 80px;
-}
-
-.btn-remove {
-  background: #dc3545;
-  color: white;
-  border: none;
-  padding: 12px 16px;
-  border-radius: 5px;
-  cursor: pointer;
-  font-size: 16px;
-  flex: 0 0 auto;
-}
-
-.btn-remove:hover:not(:disabled) {
-  background: #c82333;
-}
-
-.btn-remove:disabled {
-  background: #ccc;
-  cursor: not-allowed;
-}
-
-.btn-add-supply {
-  background: #28a745;
-  color: white;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 5px;
-  cursor: pointer;
-  font-size: 14px;
-  margin-top: 10px;
-}
-
-.btn-add-supply:hover {
-  background: #218838;
-}
-
 .form-group {
   margin-bottom: 25px;
 }
@@ -493,18 +410,205 @@ label {
   font-weight: 500;
 }
 
-input {
+input, select {
   width: 100%;
   padding: 12px;
   border: 1px solid #ddd;
   border-radius: 5px;
   font-size: 16px;
   box-sizing: border-box;
+  background-color: white;
 }
 
-input:focus {
+input:focus, select:focus {
   outline: none;
   border-color: #667eea;
+}
+
+.order-section {
+  border-bottom: 2px solid #f0f0f0;
+  padding-bottom: 30px;
+  margin-bottom: 30px;
+}
+
+.tickets-section h3 {
+  margin: 0 0 20px 0;
+  color: #333;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ticket-line {
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 25px;
+  margin-bottom: 20px;
+}
+
+.ticket-line-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.ticket-line-header h4 {
+  margin: 0;
+  color: #555;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.ticket-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+}
+
+.ticket-fields .form-group {
+  margin-bottom: 0;
+}
+
+.full-width {
+  grid-column: 1 / -1;
+}
+
+.btn-remove {
+  background: #dc3545;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.2s;
+}
+
+.btn-remove:hover:not(:disabled) {
+  background: #c82333;
+}
+
+.btn-remove:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.btn-remove-ticket {
+  background: #dc3545;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.2s;
+}
+
+.btn-remove-ticket:hover:not(:disabled) {
+  background: #c82333;
+}
+
+.btn-remove-ticket:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.btn-add-ticket {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.2s;
+}
+
+.btn-add-ticket:hover {
+  background: #218838;
+}
+
+.hint {
+  margin: 5px 0 0 0;
+  font-size: 13px;
+  color: #666;
+}
+
+.supplies-subsection {
+  grid-column: 1 / -1;
+  margin-top: 10px;
+  padding: 15px;
+  background: white;
+  border-radius: 5px;
+  border: 1px solid #ddd;
+}
+
+.supplies-subsection label {
+  display: block;
+  margin-bottom: 10px;
+  color: #555;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.supply-item {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+  align-items: center;
+}
+
+.supply-item input[type="text"] {
+  flex: 2;
+}
+
+.supply-item input[type="number"] {
+  flex: 0 0 80px;
+}
+
+.btn-remove-small {
+  background: #dc3545;
+  color: white;
+  border: none;
+  padding: 10px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  flex: 0 0 auto;
+}
+
+.btn-remove-small:hover:not(:disabled) {
+  background: #c82333;
+}
+
+.btn-remove-small:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.btn-add-supply-small {
+  background: #17a2b8;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  margin-top: 5px;
+}
+
+.btn-add-supply-small:hover {
+  background: #138496;
 }
 
 .error-message {
@@ -527,6 +631,8 @@ input:focus {
   display: flex;
   gap: 10px;
   margin-top: 30px;
+  padding-top: 30px;
+  border-top: 2px solid #f0f0f0;
 }
 
 .form-actions button {
@@ -543,75 +649,36 @@ button:disabled {
     padding: 15px;
   }
 
-  .nav-tabs {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-
-  .nav-tabs::-webkit-scrollbar {
-    display: none;
-  }
-
-  .nav-tab {
-    padding: 10px 16px;
-    font-size: 14px;
-    white-space: nowrap;
-  }
-
-  .ticket-form {
+  .form-card {
     padding: 20px;
   }
 
-  h2 {
-    font-size: 22px;
+  .form-card h2 {
+    font-size: 20px;
   }
 
-  .ticket-type-selector {
-    flex-direction: column;
-    gap: 10px;
+  .ticket-fields {
+    grid-template-columns: 1fr;
   }
 
-  .type-btn {
+  .ticket-line {
     padding: 15px;
   }
 
-  .attendee-subtypes {
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-
-  .subtype-btn {
-    padding: 12px;
-    font-size: 13px;
-  }
-
-  .form-group label {
-    font-size: 14px;
-  }
-
-  .form-group input,
-  .form-group select,
-  .form-group textarea {
-    font-size: 14px;
-  }
-
-  .supply-row {
+  .supply-item {
     flex-direction: column;
     gap: 10px;
   }
 
-  .supply-row input {
-    width: 100%;
-  }
-
-  .supply-row .btn-remove {
+  .supply-item .form-group,
+  .supply-item .form-group:first-child,
+  .supply-item .form-group:nth-child(2) {
+    flex: 1;
     width: 100%;
   }
 
   .form-actions {
     flex-direction: column;
-    gap: 10px;
   }
 
   .form-actions button {
