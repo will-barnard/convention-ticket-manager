@@ -850,8 +850,13 @@ router.post('/batch-send-emails', authMiddleware, async (req, res) => {
   }
 });
 
-// Send individual ticket email (protected, superadmin only)
-router.post('/:id/send-email', authMiddleware, superAdminMiddleware, async (req, res) => {
+// Send individual ticket email (protected, admin/superadmin)
+router.post('/:id/send-email', authMiddleware, async (req, res) => {
+  // Allow both admin and superadmin
+  if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
   const ticketId = parseInt(req.params.id);
 
   try {
