@@ -118,6 +118,20 @@ async function runMigrations() {
     `);
     console.log('✓ Ticket status constraint updated to include cancelled');
 
+    // Add booth_range column for exhibitor tickets
+    await db.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'tickets' AND column_name = 'booth_range'
+        ) THEN
+          ALTER TABLE tickets ADD COLUMN booth_range VARCHAR(100);
+        END IF;
+      END $$;
+    `);
+    console.log('✓ Booth range column ensured');
+
     console.log('Migrations completed successfully!');
     process.exit(0);
   } catch (error) {

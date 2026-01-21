@@ -106,16 +106,51 @@
                   />
                 </div>
 
+                <!-- Exhibitor Booth Range -->
+                <div v-if="ticket.ticketType === 'exhibitor'" class="form-group">
+                  <label>Booth(s) *</label>
+                  <input
+                    v-model="ticket.boothRange"
+                    type="text"
+                    required
+                    placeholder="e.g., 101-104 or 205"
+                  />
+                  <p class="hint">{{ ticket.quantity }} booth{{ ticket.quantity > 1 ? 's' : '' }} required for {{ ticket.quantity }} ticket{{ ticket.quantity > 1 ? 's' : '' }}</p>
+                </div>
+
                 <!-- Exhibitor Supplies Section -->
                 <div v-if="ticket.ticketType === 'exhibitor'" class="supplies-subsection">
-                  <label>Supplies Provided</label>
-                  <div v-for="(supply, supplyIndex) in ticket.supplies" :key="supplyIndex" class="supply-item">
+                  <label>Included & Additional Supplies</label>
+                  
+                  <!-- Hardcoded Exhibitor Passes (greyed out) -->
+                  <div class="supply-item supply-included">
                     <input
-                      v-model="supply.name"
                       type="text"
-                      placeholder="Supply name"
-                      required
+                      value="Exhibitor Pass"
+                      disabled
+                      class="supply-included-input"
                     />
+                    <input
+                      type="number"
+                      :value="ticket.quantity * 2"
+                      disabled
+                      class="supply-included-input"
+                    />
+                    <span class="supply-included-label">Included</span>
+                  </div>
+
+                  <!-- Additional supplies dropdown -->
+                  <div v-for="(supply, supplyIndex) in ticket.supplies" :key="supplyIndex" class="supply-item">
+                    <select
+                      v-model="supply.name"
+                      required
+                    >
+                      <option value="">Select supply</option>
+                      <option value="Table">Table</option>
+                      <option value="Black Table Drape">Black Table Drape</option>
+                      <option value="Chair">Chair</option>
+                      <option value="Extra Exhibitor Pass">Extra Exhibitor Pass</option>
+                    </select>
                     <input
                       v-model.number="supply.quantity"
                       type="number"
@@ -202,6 +237,7 @@ export default {
         name: '',
         teacherName: '',
         quantity: 1,
+        boothRange: '',
         supplies: [{ name: '', quantity: 1 }]
       }]
     });
@@ -231,6 +267,7 @@ export default {
       }
       if (ticket.ticketType !== 'exhibitor') {
         ticket.supplies = [{ name: '', quantity: 1 }];
+        ticket.boothRange = '';
       }
       if (ticket.ticketType !== 'attendee') {
         ticket.ticketSubtype = '';
@@ -244,6 +281,7 @@ export default {
         name: '',
         teacherName: '',
         quantity: 1,
+        boothRange: '',
         supplies: [{ name: '', quantity: 1 }]
       });
     };
@@ -289,7 +327,25 @@ export default {
             }
 
             if (ticket.ticketType === 'exhibitor') {
-              t.supplies = ticket.supplies.filter(s => s.name.trim() !== '');
+              t.boothRange = ticket.boothRange;
+              
+              // Add base exhibitor passes (2x ticket quantity)
+              const baseExhibitorPasses = ticket.quantity * 2;
+              
+              // Get extra exhibitor passes from supplies
+              const extraPasses = ticket.supplies
+                .filter(s => s.name === 'Extra Exhibitor Pass')
+                .reduce((sum, s) => sum + (s.quantity || 0), 0);
+              
+              // Combine into total exhibitor passes
+              const totalExhibitorPasses = baseExhibitorPasses + extraPasses;
+              
+              // Filter out extra exhibitor passes and add combined total
+              const otherSupplies = ticket.supplies.filter(s => s.name.trim() !== '' && s.name !== 'Extra Exhibitor Pass');
+              t.supplies = [
+                { name: 'Exhibitor Pass', quantity: totalExhibitorPasses },
+                ...otherSupplies
+              ];
             }
 
             return t;
@@ -327,6 +383,7 @@ export default {
         name: '',
         teacherName: '',
         quantity: 1,
+        boothRange: '',
         supplies: [{ name: '', quantity: 1 }]
       }];
       error.value = '';
@@ -567,12 +624,36 @@ input:focus, select:focus {
   align-items: center;
 }
 
-.supply-item input[type="text"] {
+.supply-item input[type="text"],
+.supply-item select {
   flex: 2;
 }
 
 .supply-item input[type="number"] {
   flex: 0 0 80px;
+}
+
+.supply-included {
+  background: #f8f9fa;
+  padding: 8px;
+  border-radius: 5px;
+  border: 1px solid #e0e0e0;
+}
+
+.supply-included-input {
+  background: #e9ecef !important;
+  color: #6c757d !important;
+  cursor: not-allowed;
+}
+
+.supply-included-label {
+  color: #28a745;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 12px;
+  background: #d4edda;
+  border-radius: 4px;
+  flex: 0 0 auto;
 }
 
 .btn-remove-small {

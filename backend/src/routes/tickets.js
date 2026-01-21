@@ -15,7 +15,7 @@ router.get('/', authMiddleware, async (req, res) => {
   try {
     // Get all tickets
     const ticketsResult = await db.query(
-      'SELECT id, ticket_type, ticket_subtype, name, teacher_name, email, uuid, is_used, email_sent, status, shopify_order_id, created_at FROM tickets ORDER BY created_at DESC'
+      'SELECT id, ticket_type, ticket_subtype, name, teacher_name, email, uuid, is_used, email_sent, status, shopify_order_id, booth_range, created_at FROM tickets ORDER BY created_at DESC'
     );
     
     // Get supplies for all tickets
@@ -291,7 +291,7 @@ router.post('/create-order',
 
       // Create all tickets
       for (const ticketItem of ticketItems) {
-        const { ticketType, ticketSubtype, name, teacherName, quantity, supplies } = ticketItem;
+        const { ticketType, ticketSubtype, name, teacherName, quantity, supplies, boothRange } = ticketItem;
         const ticketQuantity = quantity || 1;
 
         // Create multiple instances of this ticket type
@@ -299,10 +299,10 @@ router.post('/create-order',
           const ticketUuid = uuidv4();
           const verifyUrl = `${process.env.FRONTEND_URL}/verify/${ticketUuid}`;
 
-          // Save ticket to database
+          // Save ticket to database with booth_range for exhibitor tickets
           const result = await db.query(
-            'INSERT INTO tickets (ticket_type, ticket_subtype, name, teacher_name, email, uuid, shopify_order_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-            [ticketType, ticketSubtype || null, name, teacherName || null, email, ticketUuid, manualOrderId]
+            'INSERT INTO tickets (ticket_type, ticket_subtype, name, teacher_name, email, uuid, shopify_order_id, booth_range) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+            [ticketType, ticketSubtype || null, name, teacherName || null, email, ticketUuid, manualOrderId, (ticketType === 'exhibitor' ? boothRange : null)]
           );
 
           const ticket = result.rows[0];
