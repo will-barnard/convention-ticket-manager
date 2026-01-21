@@ -867,8 +867,10 @@ router.post('/:id/send-email', authMiddleware, superAdminMiddleware, async (req,
 
     const ticket = ticketResult.rows[0];
 
-    // Generate QR code
-    const qrCodeDataUrl = await QRCode.toDataURL(ticket.uuid);
+    // Generate QR code with full URL
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost';
+    const verifyUrl = `${frontendUrl}/verify/${ticket.uuid}`;
+    const qrCodeDataUrl = await QRCode.toDataURL(verifyUrl);
 
     // Send email
     await emailService.sendTicketEmail({
