@@ -629,10 +629,59 @@ router.post('/:id/scan-status', authMiddleware, superAdminMiddleware, checkLockd
   }
 });
 
+// Get remaining daily email quota
+router.get('/daily-email-quota', authMiddleware, async (req, res) => {
+  try {
+    // Count emails sent today (since midnight local time)
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    
+    const result = await db.query(
+      'SELECT COUNT(*) as sent_today FROM email_send_log WHERE sent_at >= $1 AND success = true',
+      [todayStart]
+    );
+    
+    const sentToday = parseInt(result.rows[0].sent_today);
+    const dailyLimit = 100;
+    const remaining = Math.max(0, dailyLimit - sentToday);
+    
+    res.json({
+      sentToday,
+      dailyLimit,
+      remaining
+    });
+  } catch (error) {
+    console.error('Error getting daily email quota:', error);
+    res.status(500).json({ error: 'Failed to get email quota' });
+  }
+});
+
 // Batch send emails for unsent tickets (protected)
 router.post('/batch-send-emails', authMiddleware, async (req, res) => {
   try {
     const { ticketType } = req.body;
+    
+    // Check daily email limit
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    
+    const quotaResult = await db.query(
+      'SELECT COUNT(*) as sent_today FROM email_send_log WHERE sent_at >= $1 AND success = true',
+      [todayStart]
+    );
+    
+    const sentToday = parseInt(quotaResult.rows[0].sent_today);
+    const dailyLimit = 100;
+    const remaining = Math.max(0, dailyLimit - sentToday);
+    
+    if (remaining === 0) {
+      return res.status(429).json({ 
+        error: 'Daily email limit of 100 emails reached. Please try again tomorrow.',
+        sentToday,
+        dailyLimit,
+        remaining: 0
+      });
+    }
     
     // Build query based on ticket type filter
     let query = 'SELECT id, ticket_type, ticket_subtype, name, teacher_name, email, uuid FROM tickets WHERE (email_sent = false OR email_sent IS NULL)';
@@ -644,6 +693,9 @@ router.post('/batch-send-emails', authMiddleware, async (req, res) => {
     }
     
     query += ' ORDER BY created_at ASC';
+    
+    // Limit to remaining daily quota
+    query += ` LIMIT ${remaining}`;
     
     // Get all tickets that haven't had emails sent (filtered by type if specified)
     const ticketsResult = await db.query(query, params);
@@ -697,6 +749,12 @@ router.post('/batch-send-emails', authMiddleware, async (req, res) => {
           'UPDATE tickets SET email_sent = true, email_sent_at = NOW() WHERE id = $1',
           [ticket.id]
         );
+        
+        // Log the email send
+        await db.query(
+          'INSERT INTO email_send_log (recipient_email, ticket_id, send_type, success) VALUES ($1, $2, $3, $4)',
+          [ticket.email, ticket.id, 'batch_send', true]
+        );
 
         sentCount++;
 
@@ -707,6 +765,16 @@ router.post('/batch-send-emails', authMiddleware, async (req, res) => {
       } catch (emailError) {
         console.error(`Failed to send email for ticket ${ticket.id}:`, emailError);
         failedCount++;
+        
+        // Log the failed email attempt
+        try {
+          await db.query(
+            'INSERT INTO email_send_log (recipient_email, ticket_id, send_type, success) VALUES ($1, $2, $3, $4)',
+            [ticket.email, ticket.id, 'batch_send', false]
+          );
+        } catch (logError) {
+          console.error('Failed to log email failure:', logError);
+        }
         
         // Send admin notification about the bounce/failure
         try {
@@ -727,11 +795,24 @@ router.post('/batch-send-emails', authMiddleware, async (req, res) => {
       }
     }
 
+    // Get updated remaining count
+    const updatedQuotaResult = await db.query(
+      'SELECT COUNT(*) as sent_today FROM email_send_log WHERE sent_at >= $1 AND success = true',
+      [todayStart]
+    );
+    const updatedSentToday = parseInt(updatedQuotaResult.rows[0].sent_today);
+    const updatedRemaining = Math.max(0, dailyLimit - updatedSentToday);
+
     res.json({
       message: `Batch send complete. Sent: ${sentCount}, Failed: ${failedCount}`,
       sent: sentCount,
       failed: failedCount,
-      total: tickets.length
+      total: tickets.length,
+      dailyQuota: {
+        sentToday: updatedSentToday,
+        dailyLimit,
+        remaining: updatedRemaining
+      }
     });
   } catch (error) {
     console.error('Error in batch send:', error);

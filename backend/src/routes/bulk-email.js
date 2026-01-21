@@ -89,6 +89,31 @@ router.post('/send', authMiddleware, superAdminMiddleware, async (req, res) => {
         error: `Please wait ${remainingSeconds} seconds before sending another bulk email` 
       });
     }
+    
+    // Check daily email limit
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    
+    const quotaResult = await db.query(
+      'SELECT COUNT(*) as sent_today FROM email_send_log WHERE sent_at >= $1 AND success = true',
+      [todayStart]
+    );
+    
+    const sentToday = parseInt(quotaResult.rows[0].sent_today);
+    const dailyLimit = 100;
+    const remaining = Math.max(0, dailyLimit - sentToday);
+    
+    if (remaining === 0) {
+      return res.status(429).json({ 
+        error: 'Daily email limit of 100 emails reached. Please try again tomorrow.'
+      });
+    }
+    
+    if (recipients.length > remaining) {
+      return res.status(429).json({ 
+        error: `Cannot send ${recipients.length} emails. Only ${remaining} emails remaining in today's quota of 100.`
+      });
+    }
 
     // Get tickets based on selected types
     const placeholders = ticketTypes.map((_, i) => `$${i + 1}`).join(', ');
@@ -135,6 +160,13 @@ router.post('/send', authMiddleware, superAdminMiddleware, async (req, res) => {
             </div>
           `
         });
+        
+        // Log successful send
+        await db.query(
+          'INSERT INTO email_send_log (recipient_email, send_type, success) VALUES ($1, $2, $3)',
+          [recipient.email, 'bulk_email', true]
+        );
+        
         sentCount++;
 
         // 6-second delay between emails (10 per minute)
@@ -145,6 +177,16 @@ router.post('/send', authMiddleware, superAdminMiddleware, async (req, res) => {
         console.error(`Failed to send to ${recipient.email}:`, error.message);
         failedCount++;
         errors.push({ email: recipient.email, error: error.message });
+        
+        // Log failed send
+        try {
+          await db.query(
+            'INSERT INTO email_send_log (recipient_email, send_type, success) VALUES ($1, $2, $3)',
+            [recipient.email, 'bulk_email', false]
+          );
+        } catch (logError) {
+          console.error('Failed to log email failure:', logError);
+        }
       }
     }
 

@@ -146,6 +146,14 @@
                         Show Details
                       </button>
                       <button 
+                        v-if="filterType === 'exhibitor' && (authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin')"
+                        @click.stop="deleteTicket(group.tickets[0].id)"
+                        class="btn-delete"
+                        title="Delete exhibitor ticket"
+                      >
+                        Delete
+                      </button>
+                      <button 
                         v-else-if="(authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin') && group.tickets.length > 1 && group.tickets.some(t => !t.email_sent)"
                         @click.stop="sendAllTicketsEmail(group)"
                         class="btn-send-all"

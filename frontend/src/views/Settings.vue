@@ -131,6 +131,9 @@
         <div class="batch-send-section">
           <h3>Batch Send Unsent Emails</h3>
           <p class="hint">Send emails to all ticket holders who haven't received their tickets yet. Emails are sent at a rate of 10 per minute to avoid rate limiting.</p>
+          <div v-if="dailyQuota" class="quota-display" :class="{ 'quota-warning': dailyQuota.remaining < 20, 'quota-depleted': dailyQuota.remaining === 0 }">
+            <strong>Daily Email Quota:</strong> {{ dailyQuota.remaining }} remaining ({{ dailyQuota.sentToday }}/{{ dailyQuota.dailyLimit }} sent today)
+          </div>
           
           <div class="form-group">
             <label for="batchTicketType">Filter by Ticket Type</label>
@@ -145,9 +148,9 @@
           <button 
             @click="batchSendEmails" 
             class="btn-batch-send"
-            :disabled="batchSending"
+            :disabled="batchSending || (dailyQuota && dailyQuota.remaining === 0)"
           >
-            {{ batchSending ? `Sending... (${batchProgress.sent}/${batchProgress.total})` : 'Send All Unsent Emails' }}
+            {{ batchSending ? `Sending... (${batchProgress.sent}/${batchProgress.total})` : (dailyQuota && dailyQuota.remaining === 0 ? 'Daily Limit Reached' : 'Send All Unsent Emails') }}
           </button>
           
           <div v-if="batchMessage" :class="['batch-message', batchMessageType]">
@@ -389,6 +392,7 @@ export default {
     const batchMessageType = ref('');
     const batchProgress = ref({ sent: 0, total: 0 });
     const batchTicketType = ref('all');
+    const dailyQuota = ref(null);
     const resetting = ref(false);
     const resetMessage = ref('');
     const resetMessageType = ref('');
@@ -520,9 +524,24 @@ export default {
       }, 5000);
     };
 
+    const loadDailyQuota = async () => {
+      try {
+        const response = await axios.get('/api/tickets/daily-email-quota');
+        dailyQuota.value = response.data;
+      } catch (error) {
+        console.error('Error loading daily quota:', error);
+      }
+    };
+
     const batchSendEmails = async () => {
+      if (dailyQuota.value && dailyQuota.value.remaining === 0) {
+        alert('Daily email limit of 100 emails has been reached. Please try again tomorrow.');
+        return;
+      }
+      
       const typeLabel = batchTicketType.value === 'all' ? 'all ticket holders' : `${batchTicketType.value} ticket holders`;
-      if (!confirm(`Send emails to ${typeLabel} who haven't received their tickets yet? This may take several minutes.`)) {
+      const quotaWarning = dailyQuota.value ? ` (Limited to ${dailyQuota.value.remaining} emails remaining in today's quota)` : '';
+      if (!confirm(`Send emails to ${typeLabel} who haven't received their tickets yet?${quotaWarning}\n\nThis may take several minutes.`)) {
         return;
       }
 
@@ -540,20 +559,32 @@ export default {
           sent: result.sent,
           total: result.total
         };
+        
+        // Update daily quota
+        if (result.dailyQuota) {
+          dailyQuota.value = result.dailyQuota;
+        }
 
         if (result.failed > 0) {
           showBatchMessage(
-            `Batch send complete! Sent: ${result.sent}, Failed: ${result.failed}`,
+            `Batch send complete! Sent: ${result.sent}, Failed: ${result.failed}. ${dailyQuota.value.remaining} emails remaining today.`,
             'warning'
           );
         } else if (result.sent === 0) {
           showBatchMessage('No unsent emails found', 'info');
         } else {
-          showBatchMessage(`Successfully sent ${result.sent} emails!`, 'success');
+          const quotaMsg = dailyQuota.value ? ` ${dailyQuota.value.remaining} emails remaining today.` : '';
+          showBatchMessage(`Successfully sent ${result.sent} emails!${quotaMsg}`, 'success');
         }
       } catch (error) {
         console.error('Error batch sending emails:', error);
-        showBatchMessage('Failed to send emails. Please try again.', 'error');
+        if (error.response?.status === 429) {
+          showBatchMessage(error.response.data.error || 'Daily email limit reached', 'error');
+          // Reload quota to show updated numbers
+          await loadDailyQuota();
+        } else {
+          showBatchMessage('Failed to send emails. Please try again.', 'error');
+        }
       } finally {
         batchSending.value = false;
       }
@@ -904,6 +935,7 @@ export default {
     onMounted(() => {
       authStore.initAuth();
       fetchSettings();
+      loadDailyQuota();
     });
 
     return {
@@ -919,6 +951,7 @@ export default {
       batchMessageType,
       batchProgress,
       batchTicketType,
+      dailyQuota,
       resetting,
       resetMessage,
       resetMessageType,
@@ -1180,6 +1213,25 @@ export default {
   margin-top: 30px;
   padding-top: 30px;
   border-top: 1px solid #e0e0e0;
+}
+
+.quota-display {
+  background: #e8f5e9;
+  padding: 12px;
+  border-radius: 6px;
+  margin-bottom: 15px;
+  color: #2e7d32;
+  font-size: 14px;
+}
+
+.quota-display.quota-warning {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+.quota-display.quota-depleted {
+  background: #ffebee;
+  color: #c62828;
 }
 
 .batch-send-section h3 {

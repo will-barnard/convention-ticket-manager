@@ -145,7 +145,25 @@ async function runMigrations() {
       END $$;
     `);
     console.log('✓ Quantity column ensured');
+    // Create email send log table for daily rate limiting
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS email_send_log (
+        id SERIAL PRIMARY KEY,
+        sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        recipient_email VARCHAR(255) NOT NULL,
+        ticket_id INTEGER REFERENCES tickets(id) ON DELETE SET NULL,
+        send_type VARCHAR(50) NOT NULL,
+        success BOOLEAN DEFAULT true
+      )
+    `);
+    console.log('✓ Email send log table created');
 
+    // Create index on sent_at for efficient daily queries
+    await db.query(`
+      CREATE INDEX IF NOT EXISTS idx_email_send_log_sent_at 
+      ON email_send_log(sent_at)
+    `);
+    console.log('✓ Email send log index created');
     console.log('Migrations completed successfully!');
     process.exit(0);
   } catch (error) {
