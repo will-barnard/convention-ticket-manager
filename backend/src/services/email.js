@@ -73,10 +73,20 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
     const attachments = [];
     
     tickets.forEach((ticket, index) => {
+      // Debug: Log ticket structure
+      console.log(`🎫 Processing ticket ${index + 1}:`, {
+        ticket_type: ticket.ticket_type,
+        ticket_subtype: ticket.ticket_subtype,
+        hasTicketType: !!ticket.ticket_type,
+        hasSubtype: !!ticket.ticket_subtype
+      });
+      
       let ticketLabel = ticketTypeLabels[ticket.ticket_type] || 'Convention Ticket';
       if (ticket.ticket_type === 'attendee' && ticket.ticket_subtype) {
         ticketLabel = subtypeLabels[ticket.ticket_subtype] || ticketLabel;
       }
+      
+      console.log(`   → Label resolved to: ${ticketLabel}`);
       
       // Prepare QR code attachment
       const base64Data = ticket.qrCodeDataUrl.replace(/^data:image\/png;base64,/, '');
