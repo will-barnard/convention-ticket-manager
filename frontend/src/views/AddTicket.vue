@@ -222,11 +222,13 @@
 import { ref, reactive, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import axios from 'axios';
+import { useAuthStore } from '@/stores/auth';
 
 export default {
   name: 'AddTicket',
   setup() {
     const router = useRouter();
+    const authStore = useAuthStore();
 
     const orderData = reactive({
       customerName: '',

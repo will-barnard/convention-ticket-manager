@@ -80,6 +80,9 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
   const authStore = useAuthStore();
   
+  // Initialize auth headers if token exists
+  authStore.initAuth();
+  
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next('/login');
   } else if (to.path === '/login' && authStore.isAuthenticated) {
