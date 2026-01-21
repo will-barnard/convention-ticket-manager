@@ -132,6 +132,16 @@
           <h3>Batch Send Unsent Emails</h3>
           <p class="hint">Send emails to all ticket holders who haven't received their tickets yet. Emails are sent at a rate of 10 per minute to avoid rate limiting.</p>
           
+          <div class="form-group">
+            <label for="batchTicketType">Filter by Ticket Type</label>
+            <select id="batchTicketType" v-model="batchTicketType">
+              <option value="all">All Ticket Types</option>
+              <option value="student">Students Only</option>
+              <option value="exhibitor">Exhibitors Only</option>
+              <option value="attendee">Attendees Only</option>
+            </select>
+          </div>
+          
           <button 
             @click="batchSendEmails" 
             class="btn-batch-send"
@@ -378,6 +388,7 @@ export default {
     const batchMessage = ref('');
     const batchMessageType = ref('');
     const batchProgress = ref({ sent: 0, total: 0 });
+    const batchTicketType = ref('all');
     const resetting = ref(false);
     const resetMessage = ref('');
     const resetMessageType = ref('');
@@ -510,7 +521,8 @@ export default {
     };
 
     const batchSendEmails = async () => {
-      if (!confirm('Send emails to all ticket holders who haven\'t received their tickets yet? This may take several minutes.')) {
+      const typeLabel = batchTicketType.value === 'all' ? 'all ticket holders' : `${batchTicketType.value} ticket holders`;
+      if (!confirm(`Send emails to ${typeLabel} who haven't received their tickets yet? This may take several minutes.`)) {
         return;
       }
 
@@ -519,7 +531,9 @@ export default {
       batchProgress.value = { sent: 0, total: 0 };
 
       try {
-        const response = await axios.post('/api/tickets/batch-send-emails');
+        const response = await axios.post('/api/tickets/batch-send-emails', {
+          ticketType: batchTicketType.value
+        });
         const result = response.data;
         
         batchProgress.value = {
@@ -904,6 +918,7 @@ export default {
       batchMessage,
       batchMessageType,
       batchProgress,
+      batchTicketType,
       resetting,
       resetMessage,
       resetMessageType,

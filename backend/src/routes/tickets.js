@@ -441,10 +441,21 @@ router.post('/:id/scan-status', authMiddleware, superAdminMiddleware, checkLockd
 // Batch send emails for unsent tickets (protected)
 router.post('/batch-send-emails', authMiddleware, async (req, res) => {
   try {
-    // Get all tickets that haven't had emails sent
-    const ticketsResult = await db.query(
-      'SELECT id, ticket_type, ticket_subtype, name, teacher_name, email, uuid FROM tickets WHERE email_sent = false OR email_sent IS NULL ORDER BY created_at ASC'
-    );
+    const { ticketType } = req.body;
+    
+    // Build query based on ticket type filter
+    let query = 'SELECT id, ticket_type, ticket_subtype, name, teacher_name, email, uuid FROM tickets WHERE (email_sent = false OR email_sent IS NULL)';
+    const params = [];
+    
+    if (ticketType && ticketType !== 'all') {
+      query += ' AND ticket_type = $1';
+      params.push(ticketType);
+    }
+    
+    query += ' ORDER BY created_at ASC';
+    
+    // Get all tickets that haven't had emails sent (filtered by type if specified)
+    const ticketsResult = await db.query(query, params);
 
     if (ticketsResult.rows.length === 0) {
       return res.json({ 
