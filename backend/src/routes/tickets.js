@@ -15,7 +15,7 @@ router.get('/', authMiddleware, async (req, res) => {
   try {
     // Get all tickets
     const ticketsResult = await db.query(
-      'SELECT id, ticket_type, ticket_subtype, name, teacher_name, email, uuid, is_used, email_sent, status, created_at FROM tickets ORDER BY created_at DESC'
+      'SELECT id, ticket_type, ticket_subtype, name, teacher_name, email, uuid, is_used, email_sent, status, shopify_order_id, created_at FROM tickets ORDER BY created_at DESC'
     );
     
     // Get supplies for all tickets
@@ -580,6 +580,74 @@ router.post('/:id/send-email', authMiddleware, superAdminMiddleware, async (req,
   } catch (error) {
     console.error('Error sending ticket email:', error);
     res.status(500).json({ error: 'Failed to send ticket email' });
+  }
+});
+
+// Send consolidated email for multiple tickets in an order (protected, admin/superadmin)
+router.post('/send-order-email', authMiddleware, async (req, res) => {
+  // Allow both admin and superadmin
+  if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
+  const { ticketIds, customerName, customerEmail } = req.body;
+
+  if (!ticketIds || !Array.isArray(ticketIds) || ticketIds.length === 0) {
+    return res.status(400).json({ error: 'ticketIds array is required' });
+  }
+
+  if (!customerEmail) {
+    return res.status(400).json({ error: 'customerEmail is required' });
+  }
+
+  try {
+    // Get all tickets
+    const ticketsResult = await db.query(
+      'SELECT id, ticket_type, ticket_subtype, name, email, uuid FROM tickets WHERE id = ANY($1)',
+      [ticketIds]
+    );
+
+    if (ticketsResult.rows.length === 0) {
+      return res.status(404).json({ error: 'No tickets found' });
+    }
+
+    const tickets = ticketsResult.rows;
+
+    // Generate QR codes for all tickets
+    const ticketsWithQR = await Promise.all(
+      tickets.map(async (ticket) => {
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost';
+        const verifyUrl = `${frontendUrl}/verify/${ticket.uuid}`;
+        const qrCodeDataUrl = await QRCode.toDataURL(verifyUrl);
+        
+        return {
+          ...ticket,
+          qrCodeDataUrl,
+          verifyUrl
+        };
+      })
+    );
+
+    // Send consolidated email
+    await emailService.sendTicketEmail({
+      to: customerEmail,
+      name: customerName || tickets[0].name,
+      tickets: ticketsWithQR
+    });
+
+    // Mark all tickets as sent
+    await db.query(
+      'UPDATE tickets SET email_sent = true, email_sent_at = NOW() WHERE id = ANY($1)',
+      [ticketIds]
+    );
+
+    res.json({ 
+      message: 'Consolidated email sent successfully',
+      ticketsSent: tickets.length 
+    });
+  } catch (error) {
+    console.error('Error sending order email:', error);
+    res.status(500).json({ error: 'Failed to send order email' });
   }
 });
 

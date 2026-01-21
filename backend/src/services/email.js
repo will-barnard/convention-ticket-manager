@@ -26,8 +26,6 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
   console.log('   RESEND_API_KEY:', process.env.RESEND_API_KEY ? `${process.env.RESEND_API_KEY.substring(0, 8)}****` : 'NOT SET');
   console.log('   EMAIL_FROM:', process.env.EMAIL_FROM);
   console.log('   Sending to:', to);
-  console.log('   Mode:', tickets ? `Multi-ticket (${tickets.length} tickets)` : 'Single-ticket');
-  console.log('   Single ticket params:', { ticketType, ticketSubtype });
   
   const ticketTypeLabels = {
     student: 'Student Ticket',
@@ -75,20 +73,10 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
     const attachments = [];
     
     tickets.forEach((ticket, index) => {
-      // Debug: Log ticket structure
-      console.log(`🎫 Processing ticket ${index + 1}:`, {
-        ticket_type: ticket.ticket_type,
-        ticket_subtype: ticket.ticket_subtype,
-        hasTicketType: !!ticket.ticket_type,
-        hasSubtype: !!ticket.ticket_subtype
-      });
-      
       let ticketLabel = ticketTypeLabels[ticket.ticket_type] || 'Convention Ticket';
       if (ticket.ticket_type === 'attendee' && ticket.ticket_subtype) {
         ticketLabel = subtypeLabels[ticket.ticket_subtype] || ticketLabel;
       }
-      
-      console.log(`   → Label resolved to: ${ticketLabel}`);
       
       // Prepare QR code attachment
       const base64Data = ticket.qrCodeDataUrl.replace(/^data:image\/png;base64,/, '');

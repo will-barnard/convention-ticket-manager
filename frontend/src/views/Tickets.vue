@@ -88,78 +88,126 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="ticket in filteredTickets" :key="ticket.id">
-                <td>
-                  <span :class="['badge', ticket.ticket_type]">
-                    {{ formatTicketType(ticket.ticket_type) }}
-                  </span>
-                </td>
-                <td>{{ ticket.name }}</td>
-                <td v-if="filterType === 'student'">{{ ticket.teacher_name || '-' }}</td>
-                <td v-if="filterType === 'attendee'">
-                  <div class="scan-status">
-                    <span v-if="ticket.scans?.scanned" class="scanned">
-                      <font-awesome-icon icon="check-circle" class="check-icon" />
-                      Scanned {{ formatScanDate(ticket.scans.scannedOn) }}
-                      <span v-if="ticket.scans.scannedBy" class="scanner-info">
-                        by {{ ticket.scans.scannedBy.username }}
+              <template v-for="group in groupedTickets" :key="group.orderId">
+                <!-- Order Header Row -->
+                <tr class="order-row" @click="toggleOrder(group.orderId)">
+                  <td colspan="2">
+                    <div class="order-header">
+                      <font-awesome-icon 
+                        :icon="isOrderExpanded(group.orderId) ? 'chevron-down' : 'chevron-right'" 
+                        class="expand-icon"
+                      />
+                      <span class="order-badge" v-if="group.isShopifyOrder">
+                        <font-awesome-icon icon="shopping-cart" />
+                        Order
                       </span>
-                    </span>
-                    <span v-else class="not-scanned">Not Scanned</span>
-                  </div>
-                </td>
-                <td>{{ ticket.email }}</td>
-                <td v-if="filterType !== 'attendee'">
-                  <span :class="['status', { used: ticket.is_used }]">
-                    {{ ticket.is_used ? 'Used' : 'Available' }}
-                  </span>
-                </td>
-                <td>
-                  <select 
-                    :value="ticket.status || 'valid'" 
-                    @change="updateTicketStatus(ticket.id, $event.target.value)"
-                    :class="['status-select', ticket.status || 'valid']"
-                  >
-                    <option value="valid">✓ Valid</option>
-                    <option value="invalid">✗ Invalid</option>
-                    <option value="refunded">↩ Refunded</option>
-                    <option value="cancelled">✖ Cancelled</option>
-                    <option value="chargeback">⚠ Chargeback</option>
-                  </select>
-                </td>
-                <td>{{ formatDate(ticket.created_at) }}</td>
-                <td>
-                  <div class="actions-cell">
-                    <button 
-                      v-if="authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin'" 
-                      @click="openEditModal(ticket)" 
-                      class="btn-edit"
-                      title="Edit Ticket"
-                    >
-                      Edit
-                    </button>
-                    <button 
-                      v-if="(authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin') && !ticket.email_sent" 
-                      @click="sendTicketEmail(ticket.id)" 
-                      class="btn-send-email"
-                      title="Send Ticket Email"
-                    >
-                      Send Email
-                    </button>
-                    <button 
-                      v-if="(authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin') && ticket.ticket_type === 'attendee'" 
-                      @click="toggleScanStatus(ticket)" 
-                      :class="['btn-scan', { scanned: ticket.scans?.scanned }]"
-                      :title="ticket.scans?.scanned ? 'Mark as Not Scanned' : 'Mark as Scanned'"
-                    >
-                      {{ ticket.scans?.scanned ? 'Unmark Scan' : 'Mark Scanned' }}
-                    </button>
-                    <button @click="deleteTicket(ticket.id)" class="btn-delete">
-                      Delete
-                    </button>
-                  </div>
-                </td>
-              </tr>
+                      <span class="order-badge manual" v-else>
+                        <font-awesome-icon icon="hand-point-right" />
+                        Manual
+                      </span>
+                      <strong>{{ group.customerName }}</strong>
+                      <span class="ticket-count">({{ group.tickets.length }} ticket{{ group.tickets.length > 1 ? 's' : '' }})</span>
+                    </div>
+                  </td>
+                  <td v-if="filterType === 'student'"></td>
+                  <td v-if="filterType === 'attendee'"></td>
+                  <td>{{ group.customerEmail }}</td>
+                  <td v-if="filterType !== 'attendee'"></td>
+                  <td></td>
+                  <td>{{ formatDate(group.tickets[0].created_at) }}</td>
+                  <td>
+                    <div class="order-actions">
+                      <button 
+                        v-if="(authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin') && group.tickets.length > 1 && group.tickets.some(t => !t.email_sent)"
+                        @click.stop="sendAllTicketsEmail(group)"
+                        class="btn-send-all"
+                        title="Send all tickets in one email"
+                      >
+                        Send All ({{ group.tickets.filter(t => !t.email_sent).length }})
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+
+                <!-- Individual Ticket Rows (when expanded) -->
+                <template v-if="isOrderExpanded(group.orderId)">
+                  <tr v-for="ticket in group.tickets" :key="ticket.id" class="ticket-row">
+                    <td>
+                      <span :class="['badge', ticket.ticket_type]">
+                        {{ formatTicketType(ticket.ticket_type) }}
+                      </span>
+                      <div v-if="ticket.ticket_type === 'attendee' && ticket.ticket_subtype" class="ticket-subtype">
+                        {{ formatAttendeeSubtype(ticket.ticket_subtype) }}
+                      </div>
+                    </td>
+                    <td>{{ ticket.name }}</td>
+                    <td v-if="filterType === 'student'">{{ ticket.teacher_name || '-' }}</td>
+                    <td v-if="filterType === 'attendee'">
+                      <div class="scan-status">
+                        <span v-if="ticket.scans?.scanned" class="scanned">
+                          <font-awesome-icon icon="check-circle" class="check-icon" />
+                          Scanned {{ formatScanDate(ticket.scans.scannedOn) }}
+                          <span v-if="ticket.scans.scannedBy" class="scanner-info">
+                            by {{ ticket.scans.scannedBy.username }}
+                          </span>
+                        </span>
+                        <span v-else class="not-scanned">Not Scanned</span>
+                      </div>
+                    </td>
+                    <td>{{ ticket.email }}</td>
+                    <td v-if="filterType !== 'attendee'">
+                      <span :class="['status', { used: ticket.is_used }]">
+                        {{ ticket.is_used ? 'Used' : 'Available' }}
+                      </span>
+                    </td>
+                    <td>
+                      <select 
+                        :value="ticket.status || 'valid'" 
+                        @change="updateTicketStatus(ticket.id, $event.target.value)"
+                        :class="['status-select', ticket.status || 'valid']"
+                      >
+                        <option value="valid">✓ Valid</option>
+                        <option value="invalid">✗ Invalid</option>
+                        <option value="refunded">↩ Refunded</option>
+                        <option value="cancelled">✖ Cancelled</option>
+                        <option value="chargeback">⚠ Chargeback</option>
+                      </select>
+                    </td>
+                    <td>{{ formatDate(ticket.created_at) }}</td>
+                    <td>
+                      <div class="actions-cell">
+                        <button 
+                          v-if="authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin'" 
+                          @click="openEditModal(ticket)" 
+                          class="btn-edit"
+                          title="Edit Ticket"
+                        >
+                          Edit
+                        </button>
+                        <button 
+                          v-if="(authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin') && !ticket.email_sent" 
+                          @click="sendTicketEmail(ticket.id)" 
+                          class="btn-send-email"
+                          title="Send Ticket Email"
+                        >
+                          Send Email
+                        </button>
+                        <button 
+                          v-if="(authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin') && ticket.ticket_type === 'attendee'" 
+                          @click="toggleScanStatus(ticket)" 
+                          :class="['btn-scan', { scanned: ticket.scans?.scanned }]"
+                          :title="ticket.scans?.scanned ? 'Mark as Not Scanned' : 'Mark as Scanned'"
+                        >
+                          {{ ticket.scans?.scanned ? 'Unmark Scan' : 'Mark Scanned' }}
+                        </button>
+                        <button @click="deleteTicket(ticket.id)" class="btn-delete">
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </template>
+              </template>
             </tbody>
           </table>
         </div>
@@ -245,6 +293,7 @@ export default {
     const searchQuery = ref('');
     const editingTicket = ref(null);
     const saving = ref(false);
+    const expandedOrders = ref(new Set());
     const editForm = ref({
       name: '',
       email: '',
@@ -283,6 +332,44 @@ export default {
       
       return filtered;
     });
+
+    // Group tickets by order ID
+    const groupedTickets = computed(() => {
+      const groups = {};
+      
+      filteredTickets.value.forEach(ticket => {
+        const orderId = ticket.shopify_order_id || `manual-${ticket.id}`;
+        if (!groups[orderId]) {
+          groups[orderId] = {
+            orderId,
+            isShopifyOrder: !!ticket.shopify_order_id,
+            tickets: [],
+            customerName: ticket.name,
+            customerEmail: ticket.email
+          };
+        }
+        groups[orderId].tickets.push(ticket);
+      });
+      
+      // Convert to array and sort by most recent
+      return Object.values(groups).sort((a, b) => {
+        const aDate = new Date(a.tickets[0].created_at);
+        const bDate = new Date(b.tickets[0].created_at);
+        return bDate - aDate;
+      });
+    });
+
+    const toggleOrder = (orderId) => {
+      if (expandedOrders.value.has(orderId)) {
+        expandedOrders.value.delete(orderId);
+      } else {
+        expandedOrders.value.add(orderId);
+      }
+    };
+
+    const isOrderExpanded = (orderId) => {
+      return expandedOrders.value.has(orderId);
+    };
 
     const loadTickets = async () => {
       loading.value = true;
@@ -341,6 +428,20 @@ export default {
         attendee: 'Attendee'
       };
       return types[type] || type;
+    };
+
+    const formatAttendeeSubtype = (subtype) => {
+      const subtypes = {
+        vip: 'VIP',
+        adult_2day: 'Adult 2-Day',
+        adult_saturday: 'Adult Saturday',
+        adult_sunday: 'Adult Sunday',
+        child_2day: 'Child 2-Day',
+        child_saturday: 'Child Saturday',
+        child_sunday: 'Child Sunday',
+        cymbal_summit: 'Cymbal Summit'
+      };
+      return subtypes[subtype] || subtype;
     };
 
     const formatScanDate = (date) => {
@@ -439,6 +540,32 @@ export default {
       }
     };
 
+    const sendAllTicketsEmail = async (group) => {
+      const unsentCount = group.tickets.filter(t => !t.email_sent).length;
+      if (!confirm(`Send all ${unsentCount} unsent ticket(s) in one consolidated email to ${group.customerEmail}?`)) {
+        return;
+      }
+      
+      try {
+        // Get all unsent ticket IDs from this order
+        const ticketIds = group.tickets.filter(t => !t.email_sent).map(t => t.id);
+        
+        await axios.post(`/api/tickets/send-order-email`, { 
+          ticketIds,
+          customerName: group.customerName,
+          customerEmail: group.customerEmail
+        });
+        
+        alert(`Consolidated email with ${unsentCount} ticket(s) sent successfully!`);
+        
+        // Reload tickets to update email_sent status
+        await loadTickets();
+      } catch (err) {
+        console.error('Error sending order email:', err);
+        alert('Failed to send order email. Please try again.');
+      }
+    };
+
     const showChangePassword = () => {
       isChangePasswordOpen.value = true;
     };
@@ -476,12 +603,17 @@ export default {
       saveTicketEdits,
       toggleScanStatus,
       sendTicketEmail,
+      sendAllTicketsEmail,
       formatDate,
       formatTicketType,
+      formatAttendeeSubtype,
       formatScanDate,
       goToAddTicket,
       showChangePassword,
       handleLogout,
+      groupedTickets,
+      toggleOrder,
+      isOrderExpanded,
     };
   },
 };
@@ -650,6 +782,88 @@ tr:hover td {
 .badge.attendee {
   background: #e3f2fd;
   color: #1565c0;
+}
+
+.ticket-subtype {
+  font-size: 11px;
+  color: #666;
+  margin-top: 2px;
+  font-weight: 500;
+}
+
+.order-row {
+  background: #f8f9fa;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.order-row:hover {
+  background: #e9ecef !important;
+}
+
+.order-row td {
+  border-bottom: 2px solid #dee2e6;
+}
+
+.ticket-row td {
+  padding-left: 30px;
+}
+
+.ticket-row:hover td {
+  background: #f1f3f5;
+}
+
+.order-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.expand-icon {
+  color: #667eea;
+  transition: transform 0.2s;
+}
+
+.order-badge {
+  background: #667eea;
+  color: white;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.order-badge.manual {
+  background: #95a5a6;
+}
+
+.ticket-count {
+  color: #666;
+  font-weight: 400;
+  font-size: 13px;
+}
+
+.order-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-send-all {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.2s;
+  white-space: nowrap;
+}
+
+.btn-send-all:hover {
+  background: #218838;
 }
 
 .status {
