@@ -1,5 +1,6 @@
 const express = require('express');
 const db = require('../config/database');
+const authMiddleware = require('../middleware/auth');
 const checkLockdown = require('../middleware/lockdown');
 
 const router = express.Router();
@@ -64,8 +65,8 @@ async function checkDateValidity(allowedDays) {
   };
 }
 
-// Verify ticket by UUID (public endpoint)
-router.get('/:uuid', checkLockdown, async (req, res) => {
+// Verify ticket by UUID (protected endpoint - requires authentication)
+router.get('/:uuid', authMiddleware, checkLockdown, async (req, res) => {
   try {
     const { uuid } = req.params;
 
