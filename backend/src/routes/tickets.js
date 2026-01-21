@@ -348,20 +348,48 @@ router.post('/create-order',
       
       if (autoSendEmails) {
         try {
-          await emailService.sendTicketEmail({
-            to: email,
-            name: customerName,
-            tickets: createdTickets
-          });
+          // Check daily email limit before sending
+          const todayStart = new Date();
+          todayStart.setHours(0, 0, 0, 0);
           
-          emailSent = true;
-          
-          // Update all tickets to mark email as sent
-          const ticketIds = createdTickets.map(t => t.id);
-          await db.query(
-            'UPDATE tickets SET email_sent = true, email_sent_at = NOW() WHERE id = ANY($1)',
-            [ticketIds]
+          const quotaResult = await db.query(
+            'SELECT COUNT(*) as sent_today FROM email_send_log WHERE sent_at >= $1 AND success = true',
+            [todayStart]
           );
+          
+          const sentToday = parseInt(quotaResult.rows[0].sent_today);
+          const dailyLimit = 100;
+          const remaining = dailyLimit - sentToday;
+          
+          if (remaining > 0) {
+            // We have quota remaining, send the email
+            await emailService.sendTicketEmail({
+              to: email,
+              name: customerName,
+              tickets: createdTickets
+            });
+            
+            emailSent = true;
+            
+            // Update all tickets to mark email as sent
+            const ticketIds = createdTickets.map(t => t.id);
+            await db.query(
+              'UPDATE tickets SET email_sent = true, email_sent_at = NOW() WHERE id = ANY($1)',
+              [ticketIds]
+            );
+            
+            // Log the email send
+            for (const ticket of createdTickets) {
+              await db.query(
+                'INSERT INTO email_send_log (recipient_email, ticket_id, send_type, success) VALUES ($1, $2, $3, $4)',
+                [email, ticket.id, 'manual_order', true]
+              );
+            }
+          } else {
+            // Daily limit reached, leave tickets marked as unsent
+            console.log(`⚠️  Daily email limit reached (${sentToday}/${dailyLimit}). Order created but email NOT sent.`);
+            emailError = `Daily email limit of ${dailyLimit} reached. Tickets created but email not sent. Use batch send tomorrow.`;
+          }
         } catch (emailErr) {
           console.error('Error sending email:', emailErr);
           emailError = 'Email could not be sent';
@@ -673,6 +701,7 @@ router.post('/batch-send-emails', authMiddleware, async (req, res) => {
     const sentToday = parseInt(quotaResult.rows[0].sent_today);
     const dailyLimit = 100;
     const remaining = Math.max(0, dailyLimit - sentToday);
+    const batchLimit = 85; // Max per batch to leave headroom for individual orders
     
     if (remaining === 0) {
       return res.status(429).json({ 
@@ -694,8 +723,9 @@ router.post('/batch-send-emails', authMiddleware, async (req, res) => {
     
     query += ' ORDER BY created_at ASC';
     
-    // Limit to remaining daily quota
-    query += ` LIMIT ${remaining}`;
+    // Limit to the lesser of: batch limit (85) or remaining daily quota
+    const effectiveLimit = Math.min(batchLimit, remaining);
+    query += ` LIMIT ${effectiveLimit}`;
     
     // Get all tickets that haven't had emails sent (filtered by type if specified)
     const ticketsResult = await db.query(query, params);
@@ -858,6 +888,12 @@ router.post('/:id/send-email', authMiddleware, superAdminMiddleware, async (req,
       'UPDATE tickets SET email_sent = true, email_sent_at = NOW() WHERE id = $1',
       [ticketId]
     );
+    
+    // Log the email send
+    await db.query(
+      'INSERT INTO email_send_log (recipient_email, ticket_id, send_type, success) VALUES ($1, $2, $3, $4)',
+      [ticket.email, ticketId, 'individual_send', true]
+    );
 
     res.json({ message: 'Ticket email sent successfully' });
   } catch (error) {
@@ -923,6 +959,14 @@ router.post('/send-order-email', authMiddleware, async (req, res) => {
       'UPDATE tickets SET email_sent = true, email_sent_at = NOW() WHERE id = ANY($1)',
       [ticketIds]
     );
+    
+    // Log the email send for each ticket
+    for (const ticket of tickets) {
+      await db.query(
+        'INSERT INTO email_send_log (recipient_email, ticket_id, send_type, success) VALUES ($1, $2, $3, $4)',
+        [customerEmail, ticket.id, 'order_send', true]
+      );
+    }
 
     res.json({ 
       message: 'Consolidated email sent successfully',

@@ -259,20 +259,58 @@ router.post('/create-ticket', validateShopifyHmac, checkLockdown, async (req, re
     // Send one consolidated email with all tickets if auto_send_emails is enabled
     if (autoSendEmails && createdTickets.length > 0) {
       try {
-        await sendTicketEmail({
-          to: customerEmail,
-          name: customerName,
-          tickets: createdTickets
-        });
+        // Check daily email limit before sending
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
         
-        // Update email_sent status for all tickets
-        const ticketIds = createdTickets.map(t => t.id);
-        await db.query(
-          'UPDATE tickets SET email_sent = true, email_sent_at = NOW() WHERE id = ANY($1)',
-          [ticketIds]
+        const quotaResult = await db.query(
+          'SELECT COUNT(*) as sent_today FROM email_send_log WHERE sent_at >= $1 AND success = true',
+          [todayStart]
         );
         
-        console.log(`📧 Sent consolidated email with ${createdTickets.length} ticket(s) to ${customerEmail}`);
+        const sentToday = parseInt(quotaResult.rows[0].sent_today);
+        const dailyLimit = 100;
+        const remaining = dailyLimit - sentToday;
+        
+        if (remaining > 0) {
+          // We have quota remaining, send the email
+          await sendTicketEmail({
+            to: customerEmail,
+            name: customerName,
+            tickets: createdTickets
+          });
+          
+          // Update email_sent status for all tickets
+          const ticketIds = createdTickets.map(t => t.id);
+          await db.query(
+            'UPDATE tickets SET email_sent = true, email_sent_at = NOW() WHERE id = ANY($1)',
+            [ticketIds]
+          );
+          
+          // Log the email send
+          for (const ticket of createdTickets) {
+            await db.query(
+              'INSERT INTO email_send_log (recipient_email, ticket_id, send_type, success) VALUES ($1, $2, $3, $4)',
+              [customerEmail, ticket.id, 'shopify_order', true]
+            );
+          }
+          
+          console.log(`📧 Sent consolidated email with ${createdTickets.length} ticket(s) to ${customerEmail}`);
+        } else {
+          // Daily limit reached, leave tickets marked as unsent
+          console.log(`⚠️  Daily email limit reached (${sentToday}/${dailyLimit}). Tickets created but email NOT sent. Use batch send tomorrow.`);
+          
+          // Send admin notification about hitting the limit
+          try {
+            await sendAdminNotification({
+              subject: 'Daily Email Limit Reached - Tickets Created Without Email',
+              message: `A Shopify order was processed but the email was not sent because the daily limit of ${dailyLimit} emails has been reached.`,
+              ticketDetails: `Order ID: ${shopify_order_id}\nCustomer: ${customerName} <${customerEmail}>\nTickets Created: ${createdTickets.length}\nEmails Sent Today: ${sentToday}/${dailyLimit}\n\nThe tickets are saved in the database and marked as unsent. Use the batch send feature tomorrow to send these tickets.`
+            });
+          } catch (notifyError) {
+            console.error('Failed to send admin notification:', notifyError);
+          }
+        }
       } catch (emailError) {
         console.error('Failed to send ticket email:', emailError);
         

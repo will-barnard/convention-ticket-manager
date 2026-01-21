@@ -130,7 +130,10 @@
 
         <div class="batch-send-section">
           <h3>Batch Send Unsent Emails</h3>
-          <p class="hint">Send emails to all ticket holders who haven't received their tickets yet. Emails are sent at a rate of 10 per minute to avoid rate limiting.</p>
+          <p class="hint">Send emails to all ticket holders who haven't received their tickets yet. Emails are sent at a rate of 10 per minute to avoid rate limiting. Maximum 85 emails per batch to reserve capacity for new orders.</p>
+          <p class="hint" style="color: #2196F3; font-weight: 500;">
+            💡 If orders come in when the daily limit is reached, tickets are created but emails are marked as unsent. Run batch send the next day to automatically send them.
+          </p>
           <div v-if="dailyQuota" class="quota-display" :class="{ 'quota-warning': dailyQuota.remaining < 20, 'quota-depleted': dailyQuota.remaining === 0 }">
             <strong>Daily Email Quota:</strong> {{ dailyQuota.remaining }} remaining ({{ dailyQuota.sentToday }}/{{ dailyQuota.dailyLimit }} sent today)
           </div>
@@ -353,7 +356,7 @@
 </template>
 
 <script>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import axios from 'axios';
@@ -540,7 +543,8 @@ export default {
       }
       
       const typeLabel = batchTicketType.value === 'all' ? 'all ticket holders' : `${batchTicketType.value} ticket holders`;
-      const quotaWarning = dailyQuota.value ? ` (Limited to ${dailyQuota.value.remaining} emails remaining in today's quota)` : '';
+      const batchLimit = Math.min(85, dailyQuota.value?.remaining || 85);
+      const quotaWarning = dailyQuota.value ? ` (Limited to ${batchLimit} emails per batch, ${dailyQuota.value.remaining} remaining in today's quota)` : '';
       if (!confirm(`Send emails to ${typeLabel} who haven't received their tickets yet?${quotaWarning}\n\nThis may take several minutes.`)) {
         return;
       }
@@ -936,6 +940,16 @@ export default {
       authStore.initAuth();
       fetchSettings();
       loadDailyQuota();
+      
+      // Refresh quota every 30 seconds when on this page
+      const quotaInterval = setInterval(() => {
+        loadDailyQuota();
+      }, 30000);
+      
+      // Cleanup interval when component unmounts
+      onBeforeUnmount(() => {
+        clearInterval(quotaInterval);
+      });
     });
 
     return {
