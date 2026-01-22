@@ -155,9 +155,8 @@
                   <div v-for="(supply, supplyIndex) in ticket.supplies" :key="supplyIndex" class="supply-item">
                     <select
                       v-model="supply.name"
-                      required
                     >
-                      <option value="">Select supply</option>
+                      <option value="">Select supply (optional)</option>
                       <option value="Table">Table</option>
                       <option value="Black Table Drape">Black Table Drape</option>
                       <option value="Chair">Chair</option>
@@ -168,7 +167,6 @@
                       type="number"
                       min="1"
                       placeholder="Qty"
-                      required
                     />
                     <button
                       type="button"
