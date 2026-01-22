@@ -248,7 +248,7 @@ router.post('/create-order',
   authMiddleware,
   checkLockdown,
   body('customerName').trim().notEmpty(),
-  body('email').isEmail(),
+  body('email').optional({ nullable: true, checkFalsy: true }).isEmail(),
   body('tickets').isArray({ min: 1 }),
   body('tickets.*.ticketType').isIn(['student', 'exhibitor', 'attendee']),
   body('tickets.*.name').trim().notEmpty(),
@@ -264,6 +264,7 @@ router.post('/create-order',
       }
 
       const { customerName, email, tickets: ticketItems } = req.body;
+      const customerEmail = email || null; // Allow null emails
 
       // Validate each ticket based on its type
       for (const ticketItem of ticketItems) {
@@ -310,14 +311,7 @@ router.post('/create-order',
               ticketSubtype || null, 
               name, 
               teacherName || null, 
-              email, 
-              ticketUuid, 
-              manualOrderId, 
-              (ticketType === 'exhibitor' ? boothRange : null),
-              (ticketType === 'exhibitor' ? ticketQuantity : 1)
-            ]
-          );
-
+              customerEmail, 
           const ticket = result.rows[0];
 
           // Save supplies if this is an exhibitor ticket
@@ -343,10 +337,10 @@ router.post('/create-order',
         }
       }
 
-      // Send consolidated email with all QR codes if auto-send is enabled
+      // Send consolidated email with all QR codes if auto-send is enabled and email provided
       let emailSent = false;
       
-      if (autoSendEmails) {
+      if (autoSendEmails && customerEmail) {
         try {
           // Check daily email limit before sending
           const todayStart = new Date();
@@ -364,7 +358,7 @@ router.post('/create-order',
           if (remaining > 0) {
             // We have quota remaining, send the email
             await emailService.sendTicketEmail({
-              to: email,
+              to: customerEmail,
               name: customerName,
               tickets: createdTickets
             });
@@ -382,7 +376,7 @@ router.post('/create-order',
             for (const ticket of createdTickets) {
               await db.query(
                 'INSERT INTO email_send_log (recipient_email, ticket_id, send_type, success) VALUES ($1, $2, $3, $4)',
-                [email, ticket.id, 'manual_order', true]
+                [customerEmail, ticket.id, 'manual_order', true]
               );
             }
           } else {
@@ -400,7 +394,7 @@ router.post('/create-order',
               subject: 'Email Delivery Failure',
               message: 'A ticket email failed to send. The recipient may have an invalid email address or the email server rejected the message.',
               ticketDetails: {
-                recipientEmail: email,
+                recipientEmail: customerEmail,
                 recipientName: customerName,
                 ticketCount: createdTickets.length,
                 orderType: 'Mixed ticket types',
@@ -412,11 +406,15 @@ router.post('/create-order',
             console.error('Failed to send admin notification:', notificationErr);
           }
         }
+      } else if (autoSendEmails && !customerEmail) {
+        console.log('ℹ️  No email provided for order - tickets created without sending email');
       }
 
       const totalTickets = createdTickets.length;
-      const responseMessage = autoSendEmails 
-        ? (emailSent ? `Order created with ${totalTickets} ticket(s) and sent successfully` : `Order created with ${totalTickets} ticket(s) but email delivery failed`)
+      const responseMessage = !customerEmail
+        ? `Order created with ${totalTickets} ticket(s) - no email provided`
+        : (autoSendEmails 
+          ? (emailSent ? `Order created with ${totalTickets} ticket(s) and sent successfully` : `Order created with ${totalTickets} ticket(s) but email delivery failed`)
         : `Order created with ${totalTickets} ticket(s) (email sending disabled)`;
 
       res.status(201).json({
@@ -718,7 +716,7 @@ router.post('/batch-send-emails', authMiddleware, async (req, res) => {
     }
     
     // Build query based on ticket type filter
-    let query = 'SELECT id, ticket_type, ticket_subtype, name, teacher_name, email, uuid FROM tickets WHERE (email_sent = false OR email_sent IS NULL)';
+    let query = 'SELECT id, ticket_type, ticket_subtype, name, teacher_name, email, uuid FROM tickets WHERE (email_sent = false OR email_sent IS NULL) AND email IS NOT NULL';
     const params = [];
     
     if (ticketType && ticketType !== 'all') {
@@ -855,6 +853,64 @@ router.post('/batch-send-emails', authMiddleware, async (req, res) => {
   }
 });
 
+// Update ticket email (protected, admin/superadmin)
+router.put('/:id/email', authMiddleware, async (req, res) => {
+  // Allow both admin and superadmin
+  if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
+  const ticketId = parseInt(req.params.id);
+  const { email } = req.body;
+
+  // Validate email if provided
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'Invalid email format' });
+  }
+
+  try {
+    // Get current ticket info
+    const ticketResult = await db.query(
+      'SELECT id, email, email_sent FROM tickets WHERE id = $1',
+      [ticketId]
+    );
+
+    if (ticketResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Ticket not found' });
+    }
+
+    const ticket = ticketResult.rows[0];
+    const oldEmail = ticket.email;
+    const wasEmailSent = ticket.email_sent;
+
+    // Update the email
+    const result = await db.query(
+      'UPDATE tickets SET email = $1 WHERE id = $2 RETURNING *',
+      [email || null, ticketId]
+    );
+
+    // If email was previously sent and email changed, mark as not sent
+    let emailStatusChanged = false;
+    if (wasEmailSent && oldEmail !== email) {
+      await db.query(
+        'UPDATE tickets SET email_sent = false, email_sent_at = NULL WHERE id = $1',
+        [ticketId]
+      );
+      emailStatusChanged = true;
+    }
+
+    res.json({
+      message: 'Email updated successfully',
+      ticket: result.rows[0],
+      emailStatusChanged,
+      showResendOption: emailStatusChanged
+    });
+  } catch (error) {
+    console.error('Error updating email:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Send individual ticket email (protected, admin/superadmin)
 router.post('/:id/send-email', authMiddleware, async (req, res) => {
   // Allow both admin and superadmin
@@ -870,6 +926,17 @@ router.post('/:id/send-email', authMiddleware, async (req, res) => {
       'SELECT id, ticket_type, ticket_subtype, name, teacher_name, email, uuid FROM tickets WHERE id = $1',
       [ticketId]
     );
+
+    if (ticketResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Ticket not found' });
+    }
+
+    const ticket = ticketResult.rows[0];
+
+    // Check if email exists
+    if (!ticket.email) {
+      return res.status(400).json({ error: 'No email address on file for this ticket' });
+    }
 
     if (ticketResult.rows.length === 0) {
       return res.status(404).json({ error: 'Ticket not found' });

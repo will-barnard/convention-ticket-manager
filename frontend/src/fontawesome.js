@@ -7,9 +7,33 @@ import {
   faCalendarDay, 
   faCheck, 
   faStar,
-  faSearch
+  faSearch,
+  faEnvelopeOpen,
+  faPencilAlt,
+  faTimes,
+  faExclamationCircle,
+  faCheckCircle,
+  faShoppingCart,
+  faHandPointRight,
+  faFileDownload
 } from '@fortawesome/free-solid-svg-icons';
 
-library.add(faTicket, faGraduationCap, faBuilding, faCalendarDay, faCheck, faStar, faSearch);
+library.add(
+  faTicket, 
+  faGraduationCap, 
+  faBuilding, 
+  faCalendarDay, 
+  faCheck, 
+  faStar, 
+  faSearch,
+  faEnvelopeOpen,
+  faPencilAlt,
+  faTimes,
+  faExclamationCircle,
+  faCheckCircle,
+  faShoppingCart,
+  faHandPointRight,
+  faFileDownload
+);
 
 export { FontAwesomeIcon };

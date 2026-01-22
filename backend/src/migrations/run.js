@@ -145,6 +145,17 @@ async function runMigrations() {
       END $$;
     `);
     console.log('✓ Quantity column ensured');
+    
+    // Make email column nullable
+    await db.query(`
+      DO $$
+      BEGIN
+        -- Remove NOT NULL constraint from email column
+        ALTER TABLE tickets ALTER COLUMN email DROP NOT NULL;
+      END $$;
+    `);
+    console.log('✓ Email column made nullable');
+    
     // Create email send log table for daily rate limiting
     await db.query(`
       CREATE TABLE IF NOT EXISTS email_send_log (

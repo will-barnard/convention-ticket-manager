@@ -51,6 +51,13 @@
             <font-awesome-icon icon="graduation-cap" />
             Students ({{ studentTickets }})
           </button>
+          <button
+            @click="filterType = 'no-email'"
+            :class="['type-tab', { active: filterType === 'no-email' }]"
+          >
+            <font-awesome-icon icon="envelope-open" />
+            No Email ({{ noEmailTickets }})
+          </button>
         </div>
 
         <div class="search-bar">
@@ -190,7 +197,28 @@
                         <span v-else class="not-scanned">Not Scanned</span>
                       </div>
                     </td>
-                    <td>{{ ticket.email }}</td>
+                    <td>
+                      <div v-if="editingEmailForTicket === ticket.id" class="email-edit-container">
+                        <input 
+                          v-model="emailEditValue" 
+                          type="email" 
+                          class="email-edit-input"
+                          placeholder="email@example.com"
+                        />
+                        <button @click="saveEmail(ticket)" class="btn-save-small">
+                          <font-awesome-icon icon="check" />
+                        </button>
+                        <button @click="cancelEmailEdit()" class="btn-cancel-small">
+                          <font-awesome-icon icon="times" />
+                        </button>
+                      </div>
+                      <div v-else class="email-display">
+                        <span>{{ ticket.email || '(no email)' }}</span>
+                        <button @click="startEmailEdit(ticket)" class="btn-edit-small">
+                          <font-awesome-icon icon="pencil-alt" />
+                        </button>
+                      </div>
+                    </td>
                     <td v-if="filterType !== 'attendee'">
                       <span :class="['status', { used: ticket.is_used }]">
                         {{ ticket.is_used ? 'Used' : 'Available' }}
@@ -221,11 +249,12 @@
                           Edit
                         </button>
                         <button 
-                          v-if="(authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin') && !ticket.email_sent" 
+                          v-if="(authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin') && ticket.email && (!ticket.email_sent || emailJustChanged.has(ticket.id))" 
                           @click="sendTicketEmail(ticket.id)" 
-                          class="btn-send-email"
-                          title="Send Ticket Email"
+                          :class="['btn-send-email', { 'email-changed': emailJustChanged.has(ticket.id) }]"
+                          :title="emailJustChanged.has(ticket.id) ? 'Email changed - Send ticket' : 'Send Ticket Email'"
                         >
+                          <font-awesome-icon v-if="emailJustChanged.has(ticket.id)" icon="exclamation-circle" />
                           Send Email
                         </button>
                         <button 
@@ -265,7 +294,26 @@
             </div>
             <div class="info-row">
               <strong>Email:</strong>
-              <span>{{ viewingExhibitorOrder.customerEmail }}</span>
+              <div v-if="editingEmailForTicket === viewingExhibitorOrder.tickets[0].id" class="email-edit-container">
+                <input 
+                  v-model="emailEditValue" 
+                  type="email" 
+                  class="email-edit-input"
+                  placeholder="email@example.com"
+                />
+                <button @click="saveEmail(viewingExhibitorOrder.tickets[0])" class="btn-save-small">
+                  <font-awesome-icon icon="check" />
+                </button>
+                <button @click="cancelEmailEdit()" class="btn-cancel-small">
+                  <font-awesome-icon icon="times" />
+                </button>
+              </div>
+              <div v-else class="email-display">
+                <span>{{ viewingExhibitorOrder.customerEmail || '(no email)' }}</span>
+                <button @click="startEmailEdit(viewingExhibitorOrder.tickets[0])" class="btn-edit-small">
+                  <font-awesome-icon icon="pencil-alt" />
+                </button>
+              </div>
             </div>
             <div class="info-row">
               <strong>Order Type:</strong>
@@ -449,6 +497,10 @@ export default {
       ticket_type: '',
       ticket_subtype: ''
     });
+    
+    const editingEmailForTicket = ref(null);
+    const emailEditValue = ref('');
+    const emailJustChanged = ref(new Set());
 
     const studentTickets = computed(() => 
       tickets.value.filter(t => t.ticket_type === 'student').length
@@ -463,8 +515,18 @@ export default {
       tickets.value.filter(t => t.ticket_type === 'attendee').length
     );
 
+    const noEmailTickets = computed(() => 
+      tickets.value.filter(t => !t.email || t.email.trim() === '').length
+    );
+
     const filteredTickets = computed(() => {
-      let filtered = tickets.value.filter(t => t.ticket_type === filterType.value);
+      let filtered;
+      
+      if (filterType.value === 'no-email') {
+        filtered = tickets.value.filter(t => !t.email || t.email.trim() === '');
+      } else {
+        filtered = tickets.value.filter(t => t.ticket_type === filterType.value);
+      }
       
       if (searchQuery.value.trim()) {
         const query = searchQuery.value.toLowerCase().trim();
@@ -706,6 +768,9 @@ export default {
         await axios.post(`/api/tickets/${ticketId}/send-email`);
         alert('Ticket email sent successfully!');
         
+        // Clear the email changed flag for this ticket
+        emailJustChanged.value.delete(ticketId);
+        
         // Reload tickets to update email_sent status
         await loadTickets();
       } catch (err) {
@@ -747,6 +812,36 @@ export default {
     const handleLogout = () => {
       authStore.logout();
       router.push('/login');
+    };
+
+    const startEmailEdit = (ticket) => {
+      editingEmailForTicket.value = ticket.id;
+      emailEditValue.value = ticket.email || '';
+    };
+
+    const cancelEmailEdit = () => {
+      editingEmailForTicket.value = null;
+      emailEditValue.value = '';
+    };
+
+    const saveEmail = async (ticket) => {
+      try {
+        const response = await axios.put(`/api/tickets/${ticket.id}/email`, {
+          email: emailEditValue.value || null
+        });
+        
+        if (response.data.showResendOption || (ticket.email === null && emailEditValue.value)) {
+          emailJustChanged.value.add(ticket.id);
+        }
+        
+        editingEmailForTicket.value = null;
+        emailEditValue.value = '';
+        
+        await loadTickets();
+      } catch (error) {
+        console.error('Error updating email:', error);
+        alert('Failed to update email');
+      }
     };
 
     onMounted(() => {
@@ -791,6 +886,12 @@ export default {
       groupedTickets,
       toggleOrder,
       isOrderExpanded,
+      editingEmailForTicket,
+      emailEditValue,
+      emailJustChanged,
+      startEmailEdit,
+      cancelEmailEdit,
+      saveEmail,
     };
   },
 };
@@ -1492,6 +1593,84 @@ tr:hover td {
 
 .exhibitor-order .expand-icon {
   display: none;
+}
+
+/* Email Editing Styles */
+.email-edit-container {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.email-edit-input {
+  flex: 1;
+  min-width: 200px;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.email-display {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-edit-small,
+.btn-save-small,
+.btn-cancel-small {
+  padding: 0.3rem 0.5rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+
+.btn-edit-small {
+  background: #667eea;
+  color: white;
+}
+
+.btn-edit-small:hover {
+  background: #5568d3;
+}
+
+.btn-save-small {
+  background: #48bb78;
+  color: white;
+}
+
+.btn-save-small:hover {
+  background: #38a169;
+}
+
+.btn-cancel-small {
+  background: #718096;
+  color: white;
+}
+
+.btn-cancel-small:hover {
+  background: #4a5568;
+}
+
+.btn-send-email.email-changed {
+  background: #f6ad55;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.btn-send-email.email-changed:hover {
+  background: #ed8936;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
 }
 
 @media (max-width: 768px) {

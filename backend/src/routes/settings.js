@@ -222,4 +222,65 @@ router.put('/lockdown-mode', superAdminMiddleware, async (req, res) => {
   }
 });
 
+// Export tickets without emails as CSV (Admin/SuperAdmin only)
+router.get('/export-no-email-tickets', auth, async (req, res) => {
+  // Allow both admin and superadmin
+  if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    const result = await db.query(`
+      SELECT 
+        t.id,
+        t.ticket_type,
+        t.ticket_subtype,
+        t.name,
+        t.teacher_name,
+        t.booth_range,
+        t.quantity,
+        t.shopify_order_id,
+        t.status,
+        t.created_at,
+        CASE WHEN ts.ticket_id IS NOT NULL THEN 'Yes' ELSE 'No' END as scanned
+      FROM tickets t
+      LEFT JOIN ticket_scans ts ON t.id = ts.ticket_id
+      WHERE t.email IS NULL
+      ORDER BY t.created_at DESC
+    `);
+
+    // Convert to CSV
+    const tickets = result.rows;
+    if (tickets.length === 0) {
+      return res.status(404).json({ message: 'No tickets without email found' });
+    }
+
+    const csvHeader = 'ID,Type,Subtype,Name,Teacher Name,Booth Range,Quantity,Order ID,Status,Scanned,Created At\n';
+    const csvRows = tickets.map(ticket => {
+      return [
+        ticket.id,
+        ticket.ticket_type,
+        ticket.ticket_subtype || '',
+        `"${ticket.name}"`,
+        ticket.teacher_name ? `"${ticket.teacher_name}"` : '',
+        ticket.booth_range ? `"${ticket.booth_range}"` : '',
+        ticket.quantity || 1,
+        ticket.shopify_order_id || '',
+        ticket.status || 'valid',
+        ticket.scanned,
+        new Date(ticket.created_at).toISOString()
+      ].join(',');
+    }).join('\n');
+
+    const csv = csvHeader + csvRows;
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="no-email-tickets-${Date.now()}.csv"`);
+    res.send(csv);
+  } catch (error) {
+    console.error('Error exporting no-email tickets:', error);
+    res.status(500).json({ error: 'Failed to export tickets' });
+  }
+});
+
 module.exports = router;

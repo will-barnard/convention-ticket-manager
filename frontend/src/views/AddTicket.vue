@@ -22,12 +22,24 @@
           </div>
 
           <div class="form-group">
+            <div class="checkbox-wrapper">
+              <input
+                id="includeEmail"
+                v-model="includeEmail"
+                type="checkbox"
+                checked
+              />
+              <label for="includeEmail">Include email address</label>
+            </div>
+          </div>
+
+          <div v-if="includeEmail" class="form-group">
             <label for="email">Email Address *</label>
             <input
               id="email"
               v-model="orderData.email"
               type="email"
-              required
+              :required="includeEmail"
               placeholder="Enter email address"
             />
             <p class="hint">All tickets will be sent to this email</p>
@@ -247,6 +259,7 @@ export default {
     const loading = ref(false);
     const error = ref('');
     const success = ref('');
+    const includeEmail = ref(true);
 
     const totalTickets = computed(() => {
       return orderData.tickets.reduce((sum, ticket) => sum + (ticket.quantity || 0), 0);
@@ -312,7 +325,7 @@ export default {
       try {
         const payload = {
           customerName: orderData.customerName,
-          email: orderData.email,
+          email: includeEmail.value ? orderData.email : null,
           tickets: orderData.tickets.map(ticket => {
             const t = {
               ticketType: ticket.ticketType,
@@ -401,6 +414,7 @@ export default {
       loading,
       error,
       success,
+      includeEmail,
       totalTickets,
       getNamePlaceholder,
       handleSubmit,
@@ -533,6 +547,25 @@ input:focus, select:focus {
 
 .full-width {
   grid-column: 1 / -1;
+}
+
+.checkbox-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 5px;
+}
+
+.checkbox-wrapper input[type="checkbox"] {
+  width: auto;
+  height: auto;
+  cursor: pointer;
+}
+
+.checkbox-wrapper label {
+  margin: 0;
+  cursor: pointer;
+  font-weight: 500;
 }
 
 .btn-remove {
