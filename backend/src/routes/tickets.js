@@ -311,7 +311,13 @@ router.post('/create-order',
               ticketSubtype || null, 
               name, 
               teacherName || null, 
-              customerEmail, 
+              customerEmail,
+              ticketUuid,
+              shopifyOrderId || null,
+              boothRange || null,
+              ticketType === 'exhibitor' ? (quantity || 1) : null
+            ]
+          );
           const ticket = result.rows[0];
 
           // Save supplies if this is an exhibitor ticket
