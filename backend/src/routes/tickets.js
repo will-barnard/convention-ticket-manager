@@ -574,8 +574,13 @@ router.put('/:id', authMiddleware, superAdminMiddleware, checkLockdown, async (r
   }
 });
 
-// Toggle scan status (SuperAdmin only)
-router.post('/:id/scan-status', authMiddleware, superAdminMiddleware, checkLockdown, async (req, res) => {
+// Toggle scan status (Admin/SuperAdmin only)
+router.post('/:id/scan-status', authMiddleware, checkLockdown, async (req, res) => {
+  // Allow both admin and superadmin
+  if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
   try {
     const { id } = req.params;
     const { action } = req.body;

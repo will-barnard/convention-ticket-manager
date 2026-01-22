@@ -35,18 +35,131 @@
               <div class="stats-col">Remaining</div>
               <div class="stats-col progress">Progress</div>
             </div>
-            <div v-for="ticket in attendeeStats" :key="ticket.type" class="stats-table-row">
-              <div class="stats-col type">{{ ticket.type }}</div>
-              <div class="stats-col">{{ ticket.sold }}</div>
-              <div class="stats-col scanned-value">{{ ticket.scanned }}</div>
-              <div class="stats-col">{{ ticket.remaining }}</div>
+            
+            <!-- VIP (standalone) -->
+            <template v-for="ticket in vipTickets" :key="ticket.type">
+              <div class="stats-table-row">
+                <div class="stats-col type">{{ ticket.type }}</div>
+                <div class="stats-col">{{ ticket.sold }}</div>
+                <div class="stats-col scanned-value">{{ ticket.scanned }}</div>
+                <div class="stats-col">{{ ticket.remaining }}</div>
+                <div class="stats-col progress">
+                  <div class="progress-bar">
+                    <div class="progress-fill" :style="{ width: getPercentage(ticket) + '%' }"></div>
+                  </div>
+                  <span class="progress-text">{{ getPercentage(ticket) }}%</span>
+                </div>
+              </div>
+            </template>
+
+            <!-- Cymbal Summit (standalone) -->
+            <template v-for="ticket in cymbalSummitTickets" :key="ticket.type">
+              <div class="stats-table-row">
+                <div class="stats-col type">{{ ticket.type }}</div>
+                <div class="stats-col">{{ ticket.sold }}</div>
+                <div class="stats-col scanned-value">{{ ticket.scanned }}</div>
+                <div class="stats-col">{{ ticket.remaining }}</div>
+                <div class="stats-col progress">
+                  <div class="progress-bar">
+                    <div class="progress-fill" :style="{ width: getPercentage(ticket) + '%' }"></div>
+                  </div>
+                  <span class="progress-text">{{ getPercentage(ticket) }}%</span>
+                </div>
+              </div>
+            </template>
+
+            <!-- 2-Day Passes (grouped) -->
+            <div class="stats-table-row grouped-row" @click="toggleGroup('twoDay')">
+              <div class="stats-col type">
+                <span class="expand-icon">{{ expandedGroups.twoDay ? '▼' : '▶' }}</span>
+                2-Day Passes
+              </div>
+              <div class="stats-col">{{ twoDayGroup.sold }}</div>
+              <div class="stats-col scanned-value">{{ twoDayGroup.scanned }}</div>
+              <div class="stats-col">{{ twoDayGroup.remaining }}</div>
               <div class="stats-col progress">
                 <div class="progress-bar">
-                  <div class="progress-fill" :style="{ width: getPercentage(ticket) + '%' }"></div>
+                  <div class="progress-fill" :style="{ width: getPercentage(twoDayGroup) + '%' }"></div>
                 </div>
-                <span class="progress-text">{{ getPercentage(ticket) }}%</span>
+                <span class="progress-text">{{ getPercentage(twoDayGroup) }}%</span>
               </div>
             </div>
+            <template v-if="expandedGroups.twoDay">
+              <div v-for="ticket in twoDayTickets" :key="ticket.type" class="stats-table-row child-row">
+                <div class="stats-col type">{{ ticket.type }}</div>
+                <div class="stats-col">{{ ticket.sold }}</div>
+                <div class="stats-col scanned-value">{{ ticket.scanned }}</div>
+                <div class="stats-col">{{ ticket.remaining }}</div>
+                <div class="stats-col progress">
+                  <div class="progress-bar">
+                    <div class="progress-fill" :style="{ width: getPercentage(ticket) + '%' }"></div>
+                  </div>
+                  <span class="progress-text">{{ getPercentage(ticket) }}%</span>
+                </div>
+              </div>
+            </template>
+
+            <!-- Saturday Passes (grouped) -->
+            <div class="stats-table-row grouped-row" @click="toggleGroup('saturday')">
+              <div class="stats-col type">
+                <span class="expand-icon">{{ expandedGroups.saturday ? '▼' : '▶' }}</span>
+                Saturday Passes
+              </div>
+              <div class="stats-col">{{ saturdayGroup.sold }}</div>
+              <div class="stats-col scanned-value">{{ saturdayGroup.scanned }}</div>
+              <div class="stats-col">{{ saturdayGroup.remaining }}</div>
+              <div class="stats-col progress">
+                <div class="progress-bar">
+                  <div class="progress-fill" :style="{ width: getPercentage(saturdayGroup) + '%' }"></div>
+                </div>
+                <span class="progress-text">{{ getPercentage(saturdayGroup) }}%</span>
+              </div>
+            </div>
+            <template v-if="expandedGroups.saturday">
+              <div v-for="ticket in saturdayTickets" :key="ticket.type" class="stats-table-row child-row">
+                <div class="stats-col type">{{ ticket.type }}</div>
+                <div class="stats-col">{{ ticket.sold }}</div>
+                <div class="stats-col scanned-value">{{ ticket.scanned }}</div>
+                <div class="stats-col">{{ ticket.remaining }}</div>
+                <div class="stats-col progress">
+                  <div class="progress-bar">
+                    <div class="progress-fill" :style="{ width: getPercentage(ticket) + '%' }"></div>
+                  </div>
+                  <span class="progress-text">{{ getPercentage(ticket) }}%</span>
+                </div>
+              </div>
+            </template>
+
+            <!-- Sunday Passes (grouped) -->
+            <div class="stats-table-row grouped-row" @click="toggleGroup('sunday')">
+              <div class="stats-col type">
+                <span class="expand-icon">{{ expandedGroups.sunday ? '▼' : '▶' }}</span>
+                Sunday Passes
+              </div>
+              <div class="stats-col">{{ sundayGroup.sold }}</div>
+              <div class="stats-col scanned-value">{{ sundayGroup.scanned }}</div>
+              <div class="stats-col">{{ sundayGroup.remaining }}</div>
+              <div class="stats-col progress">
+                <div class="progress-bar">
+                  <div class="progress-fill" :style="{ width: getPercentage(sundayGroup) + '%' }"></div>
+                </div>
+                <span class="progress-text">{{ getPercentage(sundayGroup) }}%</span>
+              </div>
+            </div>
+            <template v-if="expandedGroups.sunday">
+              <div v-for="ticket in sundayTickets" :key="ticket.type" class="stats-table-row child-row">
+                <div class="stats-col type">{{ ticket.type }}</div>
+                <div class="stats-col">{{ ticket.sold }}</div>
+                <div class="stats-col scanned-value">{{ ticket.scanned }}</div>
+                <div class="stats-col">{{ ticket.remaining }}</div>
+                <div class="stats-col progress">
+                  <div class="progress-bar">
+                    <div class="progress-fill" :style="{ width: getPercentage(ticket) + '%' }"></div>
+                  </div>
+                  <span class="progress-text">{{ getPercentage(ticket) }}%</span>
+                </div>
+              </div>
+            </template>
             <div class="stats-table-row total-row">
               <div class="stats-col type"><strong>Total Attendees</strong></div>
               <div class="stats-col"><strong>{{ attendeeTotal.sold }}</strong></div>
@@ -169,6 +282,51 @@ export default {
     const loading = ref(true);
     const error = ref('');
     const isChangePasswordOpen = ref(false);
+    const expandedGroups = ref({
+      twoDay: false,
+      saturday: false,
+      sunday: false
+    });
+
+    // Filter tickets by type
+    const vipTickets = computed(() => 
+      attendeeStats.value.filter(t => t.type === 'VIP')
+    );
+
+    const cymbalSummitTickets = computed(() => 
+      attendeeStats.value.filter(t => t.type === 'Cymbal Summit')
+    );
+
+    const twoDayTickets = computed(() => 
+      attendeeStats.value.filter(t => t.type === 'Adult 2-Day' || t.type === 'Child 2-Day')
+    );
+
+    const saturdayTickets = computed(() => 
+      attendeeStats.value.filter(t => t.type === 'Adult Saturday' || t.type === 'Child Saturday')
+    );
+
+    const sundayTickets = computed(() => 
+      attendeeStats.value.filter(t => t.type === 'Adult Sunday' || t.type === 'Child Sunday')
+    );
+
+    // Grouped stats
+    const twoDayGroup = computed(() => ({
+      sold: twoDayTickets.value.reduce((sum, t) => sum + t.sold, 0),
+      scanned: twoDayTickets.value.reduce((sum, t) => sum + t.scanned, 0),
+      remaining: twoDayTickets.value.reduce((sum, t) => sum + t.remaining, 0)
+    }));
+
+    const saturdayGroup = computed(() => ({
+      sold: saturdayTickets.value.reduce((sum, t) => sum + t.sold, 0),
+      scanned: saturdayTickets.value.reduce((sum, t) => sum + t.scanned, 0),
+      remaining: saturdayTickets.value.reduce((sum, t) => sum + t.remaining, 0)
+    }));
+
+    const sundayGroup = computed(() => ({
+      sold: sundayTickets.value.reduce((sum, t) => sum + t.sold, 0),
+      scanned: sundayTickets.value.reduce((sum, t) => sum + t.scanned, 0),
+      remaining: sundayTickets.value.reduce((sum, t) => sum + t.remaining, 0)
+    }));
 
     const attendeeTotal = computed(() => {
       return {
@@ -189,6 +347,10 @@ export default {
     const getPercentage = (stats) => {
       if (stats.sold === 0) return 0;
       return Math.round((stats.scanned / stats.sold) * 100);
+    };
+
+    const toggleGroup = (groupName) => {
+      expandedGroups.value[groupName] = !expandedGroups.value[groupName];
     };
 
     const loadStats = async () => {
@@ -230,9 +392,19 @@ export default {
       loading,
       error,
       isChangePasswordOpen,
+      expandedGroups,
+      vipTickets,
+      cymbalSummitTickets,
+      twoDayTickets,
+      saturdayTickets,
+      sundayTickets,
+      twoDayGroup,
+      saturdayGroup,
+      sundayGroup,
       attendeeTotal,
       grandTotal,
       getPercentage,
+      toggleGroup,
       showChangePassword,
       handleLogout,
     };
@@ -360,6 +532,35 @@ export default {
 
 .stats-table-row:hover {
   background: #f8f9fa;
+}
+
+.stats-table-row.grouped-row {
+  cursor: pointer;
+  font-weight: 500;
+  background: #f8f9fa;
+  border-left: 4px solid #667eea;
+}
+
+.stats-table-row.grouped-row:hover {
+  background: #eff1f3;
+}
+
+.stats-table-row.child-row {
+  background: #fafbfc;
+  padding-left: 50px;
+  font-size: 14px;
+}
+
+.stats-table-row.child-row:hover {
+  background: #f0f2f4;
+}
+
+.expand-icon {
+  display: inline-block;
+  margin-right: 10px;
+  font-size: 12px;
+  color: #667eea;
+  transition: transform 0.2s;
 }
 
 .stats-section.grand-total .stats-table-row:hover {
