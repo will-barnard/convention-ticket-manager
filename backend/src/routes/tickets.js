@@ -421,7 +421,7 @@ router.post('/create-order',
         ? `Order created with ${totalTickets} ticket(s) - no email provided`
         : (autoSendEmails 
           ? (emailSent ? `Order created with ${totalTickets} ticket(s) and sent successfully` : `Order created with ${totalTickets} ticket(s) but email delivery failed`)
-        : `Order created with ${totalTickets} ticket(s) (email sending disabled)`;
+          : `Order created with ${totalTickets} ticket(s) (email sending disabled)`);
 
       res.status(201).json({
         message: responseMessage,
