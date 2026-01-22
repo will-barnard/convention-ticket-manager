@@ -85,7 +85,7 @@ router.post('/create-ticket', validateShopifyHmac, checkLockdown, async (req, re
     });
   }
 
-  if (!customer || !customer.email || !customer.first_name) {
+  if (!customer || !customer.first_name) {
     console.log('❌ 400 Bad Request: Missing customer information', { customer });
     
     // Log failed webhook
@@ -95,7 +95,7 @@ router.post('/create-ticket', validateShopifyHmac, checkLockdown, async (req, re
           `INSERT INTO webhook_logs (shopify_order_id, webhook_data, processed, error_message, webhook_type, created_at) 
            VALUES ($1, $2, FALSE, $3, $4, NOW()) 
            RETURNING id`,
-          [order_id ? String(order_id) : null, JSON.stringify(req.body), 'Missing customer information', 'order_create']
+          [order_id ? String(order_id) : null, JSON.stringify(req.body), 'Missing customer first_name', 'order_create']
         );
         webhookLogId = logResult.rows[0].id;
       } catch (logErr) {
@@ -104,13 +104,13 @@ router.post('/create-ticket', validateShopifyHmac, checkLockdown, async (req, re
     }
     
     return res.status(400).json({ 
-      error: 'Missing required fields: customer.email and customer.first_name are required' 
+      error: 'Missing required field: customer.first_name is required' 
     });
   }
 
   const shopify_order_id = order_id ? String(order_id) : null;
   const customerName = `${customer.first_name} ${customer.last_name || ''}`.trim();
-  const customerEmail = customer.email;
+  const customerEmail = customer.email || null;
 
   // Log webhook to database FIRST (before any processing)
   try {
@@ -256,8 +256,8 @@ router.post('/create-ticket', validateShopifyHmac, checkLockdown, async (req, re
       }
     }
 
-    // Send one consolidated email with all tickets if auto_send_emails is enabled
-    if (autoSendEmails && createdTickets.length > 0) {
+    // Send one consolidated email with all tickets if auto_send_emails is enabled and email provided
+    if (autoSendEmails && createdTickets.length > 0 && customerEmail) {
       try {
         // Check daily email limit before sending
         const todayStart = new Date();
@@ -325,6 +325,8 @@ router.post('/create-ticket', validateShopifyHmac, checkLockdown, async (req, re
           console.error('Failed to send admin notification:', notifyError);
         }
       }
+    } else if (autoSendEmails && createdTickets.length > 0 && !customerEmail) {
+      console.log('ℹ️  No email provided for Shopify order - tickets created without sending email');
     }
 
     console.log(`✅ Successfully created ${createdTickets.length} ticket(s) from order ${shopify_order_id}`);

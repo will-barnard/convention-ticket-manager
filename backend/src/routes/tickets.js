@@ -313,7 +313,7 @@ router.post('/create-order',
               teacherName || null, 
               customerEmail,
               ticketUuid,
-              shopifyOrderId || null,
+              manualOrderId,
               boothRange || null,
               ticketType === 'exhibitor' ? (quantity || 1) : null
             ]
