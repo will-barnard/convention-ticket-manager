@@ -248,7 +248,7 @@ export default {
         ticketSubtype: '',
         name: '',
         teacherName: '',
-        quantity: 1,
+        quantity: null,
         boothRange: '',
         supplies: [{ name: '', quantity: 1 }]
       }]
