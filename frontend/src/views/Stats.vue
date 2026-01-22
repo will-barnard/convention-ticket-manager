@@ -10,127 +10,133 @@
         <router-link to="/tickets" class="nav-tab" active-class="active">Tickets</router-link>
         <router-link to="/stats" class="nav-tab" active-class="active">Stats</router-link>
         <router-link to="/settings" class="nav-tab" active-class="active">Settings</router-link>
-        <router-link v-if="authStore.user?.role === 'superadmin'" to="/users" class="nav-tab" active-class="active">Users</router-link>
-        <router-link v-if="authStore.user?.role === 'superadmin'" to="/webhooks" class="nav-tab" active-class="active">Webhooks</router-link>
-        <router-link v-if="authStore.user?.role === 'superadmin'" to="/bulk-email" class="nav-tab" active-class="active">Bulk Email</router-link>
+        <router-link v-if="authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin'" to="/users" class="nav-tab" active-class="active">Users</router-link>
+        <router-link v-if="authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin'" to="/webhooks" class="nav-tab" active-class="active">Webhooks</router-link>
+        <router-link v-if="authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin'" to="/bulk-email" class="nav-tab" active-class="active">Bulk Email</router-link>
       </nav>
 
-      <div v-if="loading" class="loading">Loading usage statistics...</div>
+      <div v-if="loading" class="loading">Loading statistics...</div>
 
       <div v-else-if="error" class="error-message">
         {{ error }}
       </div>
 
-      <div v-else-if="!stats || stats.length === 0" class="empty-state">
-        <p>No convention dates configured yet.</p>
-        <p>Please set up your convention dates in Settings.</p>
-        <router-link to="/settings" class="btn-primary">Go to Settings</router-link>
-      </div>
-
       <div v-else class="stats-content">
-        <h2>Ticket Statistics by Category</h2>
+        <h2>Ticket Statistics</h2>
         
-        <div class="stats-grid">
-          <div v-for="day in stats" :key="day.day" class="day-card">
-            <div class="day-header">
-              <h3>{{ day.day }}</h3>
+        <!-- Attendee Tickets Section -->
+        <div class="stats-section">
+          <h3>Attendee Tickets</h3>
+          <div class="stats-table">
+            <div class="stats-table-header">
+              <div class="stats-col type">Ticket Type</div>
+              <div class="stats-col">Sold</div>
+              <div class="stats-col">Scanned</div>
+              <div class="stats-col">Remaining</div>
+              <div class="stats-col progress">Progress</div>
             </div>
-            
-            <div class="stats-content">
-              <div class="stat-row">
-                <span class="label">Tickets Sold:</span>
-                <span class="value sold">{{ day.sold }}</span>
-              </div>
-              <div class="stat-row">
-                <span class="label">Tickets Scanned:</span>
-                <span class="value scanned">{{ day.scanned }}</span>
-              </div>
-              <div class="stat-row">
-                <span class="label">Remaining:</span>
-                <span class="value remaining">{{ day.sold - day.scanned }}</span>
-              </div>
-              
-              <div class="breakdown-section">
-                <div class="breakdown-title">Breakdown by Type:</div>
-                <div class="breakdown-items">
-                  <div class="breakdown-item">
-                    <span class="breakdown-label">Student:</span>
-                    <span class="breakdown-value">{{ day.studentCount || 0 }}</span>
-                  </div>
-                  <div class="breakdown-item">
-                    <span class="breakdown-label">Exhibitor:</span>
-                    <span class="breakdown-value">{{ day.exhibitorCount || 0 }}</span>
-                  </div>
-                  <div class="breakdown-item">
-                    <span class="breakdown-label">Attendee:</span>
-                    <span class="breakdown-value">{{ day.attendeeCount || 0 }}</span>
-                  </div>
+            <div v-for="ticket in attendeeStats" :key="ticket.type" class="stats-table-row">
+              <div class="stats-col type">{{ ticket.type }}</div>
+              <div class="stats-col">{{ ticket.sold }}</div>
+              <div class="stats-col scanned-value">{{ ticket.scanned }}</div>
+              <div class="stats-col">{{ ticket.remaining }}</div>
+              <div class="stats-col progress">
+                <div class="progress-bar">
+                  <div class="progress-fill" :style="{ width: getPercentage(ticket) + '%' }"></div>
                 </div>
+                <span class="progress-text">{{ getPercentage(ticket) }}%</span>
               </div>
             </div>
-
-            <div class="progress-section">
-              <div class="progress-bar">
-                <div 
-                  class="progress-fill" 
-                  :style="{ width: day.percentage + '%' }"
-                ></div>
-              </div>
-              <p class="percentage">{{ day.percentage }}% scanned</p>
-            </div>
-          </div>
-        </div>
-
-        <div class="summary-card">
-          <h3>Overall Summary</h3>
-          <div class="summary-stats">
-            <div class="summary-item">
-              <div class="summary-value">{{ totalSold }}</div>
-              <div class="summary-label">Total Tickets Sold</div>
-            </div>
-            <div class="summary-item">
-              <div class="summary-value">{{ totalScanned }}</div>
-              <div class="summary-label">Total Tickets Scanned</div>
-            </div>
-            <div class="summary-item">
-              <div class="summary-value">{{ overallPercentage }}%</div>
-              <div class="summary-label">Overall Usage Rate</div>
-            </div>
-          </div>
-          
-          <div class="summary-breakdown">
-            <h4>Breakdown by Type</h4>
-            <div class="summary-breakdown-grid">
-              <div class="summary-breakdown-item">
-                <div class="summary-breakdown-value">{{ totalStudents }}</div>
-                <div class="summary-breakdown-label">Student Tickets</div>
-              </div>
-              <div class="summary-breakdown-item">
-                <div class="summary-breakdown-value">{{ totalExhibitors }}</div>
-                <div class="summary-breakdown-label">Exhibitor Tickets</div>
-              </div>
-              <div class="summary-breakdown-item">
-                <div class="summary-breakdown-value">{{ totalAttendees }}</div>
-                <div class="summary-breakdown-label">Attendee Tickets</div>
+            <div class="stats-table-row total-row">
+              <div class="stats-col type"><strong>Total Attendees</strong></div>
+              <div class="stats-col"><strong>{{ attendeeTotal.sold }}</strong></div>
+              <div class="stats-col scanned-value"><strong>{{ attendeeTotal.scanned }}</strong></div>
+              <div class="stats-col"><strong>{{ attendeeTotal.remaining }}</strong></div>
+              <div class="stats-col progress">
+                <div class="progress-bar">
+                  <div class="progress-fill total" :style="{ width: getPercentage(attendeeTotal) + '%' }"></div>
+                </div>
+                <span class="progress-text"><strong>{{ getPercentage(attendeeTotal) }}%</strong></span>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="ticket-type-breakdown-card">
-          <h3>Breakdown by Ticket Type</h3>
-          <div class="ticket-type-table">
-            <div class="ticket-type-header">
-              <div class="ticket-type-col">Ticket Type</div>
-              <div class="ticket-type-col">Sold</div>
-              <div class="ticket-type-col">Scanned</div>
-              <div class="ticket-type-col">Remaining</div>
+        <!-- Exhibitor Tickets Section -->
+        <div class="stats-section">
+          <h3>Exhibitor Tickets</h3>
+          <div class="stats-table">
+            <div class="stats-table-header">
+              <div class="stats-col type">Ticket Type</div>
+              <div class="stats-col">Sold</div>
+              <div class="stats-col">Scanned</div>
+              <div class="stats-col">Remaining</div>
+              <div class="stats-col progress">Progress</div>
             </div>
-            <div v-for="ticketType in ticketTypeBreakdown" :key="ticketType.type" class="ticket-type-row">
-              <div class="ticket-type-col type-name">{{ ticketType.type }}</div>
-              <div class="ticket-type-col">{{ ticketType.sold }}</div>
-              <div class="ticket-type-col">{{ ticketType.scanned }}</div>
-              <div class="ticket-type-col">{{ ticketType.remaining }}</div>
+            <div class="stats-table-row">
+              <div class="stats-col type">{{ exhibitorStats.type }}</div>
+              <div class="stats-col">{{ exhibitorStats.sold }}</div>
+              <div class="stats-col scanned-value">{{ exhibitorStats.scanned }}</div>
+              <div class="stats-col">{{ exhibitorStats.remaining }}</div>
+              <div class="stats-col progress">
+                <div class="progress-bar">
+                  <div class="progress-fill" :style="{ width: getPercentage(exhibitorStats) + '%' }"></div>
+                </div>
+                <span class="progress-text">{{ getPercentage(exhibitorStats) }}%</span>
+              </div>
+            </div>
+          </div>
+          <p class="note">* Exhibitor tickets are grouped by order</p>
+        </div>
+
+        <!-- Student Tickets Section -->
+        <div class="stats-section">
+          <h3>Student Tickets</h3>
+          <div class="stats-table">
+            <div class="stats-table-header">
+              <div class="stats-col type">Ticket Type</div>
+              <div class="stats-col">Sold</div>
+              <div class="stats-col">Scanned</div>
+              <div class="stats-col">Remaining</div>
+              <div class="stats-col progress">Progress</div>
+            </div>
+            <div class="stats-table-row">
+              <div class="stats-col type">{{ studentStats.type }}</div>
+              <div class="stats-col">{{ studentStats.sold }}</div>
+              <div class="stats-col scanned-value">{{ studentStats.scanned }}</div>
+              <div class="stats-col">{{ studentStats.remaining }}</div>
+              <div class="stats-col progress">
+                <div class="progress-bar">
+                  <div class="progress-fill" :style="{ width: getPercentage(studentStats) + '%' }"></div>
+                </div>
+                <span class="progress-text">{{ getPercentage(studentStats) }}%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Grand Total Section -->
+        <div class="stats-section grand-total">
+          <h3>Grand Total</h3>
+          <div class="stats-table">
+            <div class="stats-table-header">
+              <div class="stats-col type">All Tickets</div>
+              <div class="stats-col">Sold</div>
+              <div class="stats-col">Scanned</div>
+              <div class="stats-col">Remaining</div>
+              <div class="stats-col progress">Progress</div>
+            </div>
+            <div class="stats-table-row total-row">
+              <div class="stats-col type"><strong>Grand Total</strong></div>
+              <div class="stats-col"><strong>{{ grandTotal.sold }}</strong></div>
+              <div class="stats-col scanned-value"><strong>{{ grandTotal.scanned }}</strong></div>
+              <div class="stats-col"><strong>{{ grandTotal.remaining }}</strong></div>
+              <div class="stats-col progress">
+                <div class="progress-bar">
+                  <div class="progress-fill grand-total" :style="{ width: getPercentage(grandTotal) + '%' }"></div>
+                </div>
+                <span class="progress-text"><strong>{{ getPercentage(grandTotal) }}%</strong></span>
+              </div>
             </div>
           </div>
         </div>
@@ -157,36 +163,33 @@ export default {
     const router = useRouter();
     const authStore = useAuthStore();
 
-    const stats = ref([]);
+    const attendeeStats = ref([]);
+    const exhibitorStats = ref({ type: 'Exhibitor', sold: 0, scanned: 0, remaining: 0 });
+    const studentStats = ref({ type: 'Student', sold: 0, scanned: 0, remaining: 0 });
     const loading = ref(true);
     const error = ref('');
     const isChangePasswordOpen = ref(false);
-    const ticketTypeBreakdown = ref([]);
 
-    const totalSold = computed(() => {
-      return stats.value.reduce((sum, day) => sum + day.sold, 0);
+    const attendeeTotal = computed(() => {
+      return {
+        sold: attendeeStats.value.reduce((sum, t) => sum + t.sold, 0),
+        scanned: attendeeStats.value.reduce((sum, t) => sum + t.scanned, 0),
+        remaining: attendeeStats.value.reduce((sum, t) => sum + t.remaining, 0)
+      };
     });
 
-    const totalScanned = computed(() => {
-      return stats.value.reduce((sum, day) => sum + day.scanned, 0);
+    const grandTotal = computed(() => {
+      return {
+        sold: attendeeTotal.value.sold + exhibitorStats.value.sold + studentStats.value.sold,
+        scanned: attendeeTotal.value.scanned + exhibitorStats.value.scanned + studentStats.value.scanned,
+        remaining: attendeeTotal.value.remaining + exhibitorStats.value.remaining + studentStats.value.remaining
+      };
     });
 
-    const overallPercentage = computed(() => {
-      if (totalSold.value === 0) return 0;
-      return Math.round((totalScanned.value / totalSold.value) * 100);
-    });
-
-    const totalStudents = computed(() => {
-      return stats.value.reduce((sum, day) => sum + (day.studentCount || 0), 0);
-    });
-
-    const totalExhibitors = computed(() => {
-      return stats.value.reduce((sum, day) => sum + (day.exhibitorCount || 0), 0);
-    });
-
-    const totalAttendees = computed(() => {
-      return stats.value.reduce((sum, day) => sum + (day.attendeeCount || 0), 0);
-    });
+    const getPercentage = (stats) => {
+      if (stats.sold === 0) return 0;
+      return Math.round((stats.scanned / stats.sold) * 100);
+    };
 
     const loadStats = async () => {
       loading.value = true;
@@ -194,25 +197,15 @@ export default {
       
       try {
         const response = await axios.get('/api/stats');
-        stats.value = response.data.stats || [];
-        ticketTypeBreakdown.value = response.data.ticketTypeBreakdown || [];
+        attendeeStats.value = response.data.attendeeStats || [];
+        exhibitorStats.value = response.data.exhibitorStats || { type: 'Exhibitor', sold: 0, scanned: 0, remaining: 0 };
+        studentStats.value = response.data.studentStats || { type: 'Student', sold: 0, scanned: 0, remaining: 0 };
       } catch (err) {
-        console.error('Error loading usage stats:', err);
-        error.value = 'Failed to load usage statistics. Please try again.';
+        console.error('Error loading stats:', err);
+        error.value = 'Failed to load statistics. Please try again.';
       } finally {
         loading.value = false;
       }
-    };
-
-    const formatDate = (dateString) => {
-      if (!dateString) return '';
-      const date = new Date(dateString);
-      return date.toLocaleDateString('en-US', { 
-        weekday: 'long', 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-      });
     };
 
     const showChangePassword = () => {
@@ -231,66 +224,27 @@ export default {
 
     return {
       authStore,
-      stats,
+      attendeeStats,
+      exhibitorStats,
+      studentStats,
       loading,
       error,
       isChangePasswordOpen,
-      ticketTypeBreakdown,
-      totalSold,
-      totalScanned,
-      overallPercentage,
-      totalStudents,
-      totalExhibitors,
-      totalAttendees,
-      formatDate,
+      attendeeTotal,
+      grandTotal,
+      getPercentage,
       showChangePassword,
       handleLogout,
     };
   },
 };
 </script>
+</script>
 
 <style scoped>
 .stats {
   min-height: 100vh;
   background: #f5f5f5;
-}
-
-.header {
-  background: white;
-  padding: 20px 30px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.header h1 {
-  margin: 0;
-  color: #333;
-}
-
-.header-actions {
-  display: flex;
-  gap: 15px;
-  align-items: center;
-}
-
-.btn-secondary {
-  background: white;
-  color: #667eea;
-  border: 2px solid #667eea;
-  padding: 8px 16px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  transition: all 0.2s;
-}
-
-.btn-secondary:hover {
-  background: #667eea;
-  color: white;
 }
 
 .container {
@@ -341,127 +295,141 @@ export default {
   border: 1px solid #f5c6cb;
 }
 
-.empty-state {
-  text-align: center;
-  padding: 60px 20px;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
-
-.empty-state p {
-  color: #666;
-  font-size: 18px;
-  margin-bottom: 20px;
-}
-
-.btn-primary {
-  background: #667eea;
-  color: white;
-  padding: 12px 24px;
-  border-radius: 8px;
-  text-decoration: none;
-  display: inline-block;
-  font-weight: 500;
-  transition: background 0.2s;
-}
-
-.btn-primary:hover {
-  background: #5568d3;
-}
-
 .stats-content h2 {
   color: #333;
   margin-bottom: 30px;
   font-size: 28px;
 }
 
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 20px;
-  margin-bottom: 40px;
-}
-
-.day-card {
+.stats-section {
   background: white;
   border-radius: 12px;
-  padding: 25px;
+  padding: 30px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  transition: transform 0.2s, box-shadow 0.2s;
+  margin-bottom: 30px;
 }
 
-.day-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+.stats-section h3 {
+  margin: 0 0 25px 0;
+  color: #333;
+  font-size: 22px;
+  font-weight: 600;
 }
 
-.day-header {
-  border-bottom: 2px solid #e0e0e0;
-  padding-bottom: 15px;
-  margin-bottom: 20px;
+.stats-section.grand-total {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
 }
 
-.day-header h3 {
-  margin: 0 0 5px 0;
-  color: #667eea;
-  font-size: 24px;
+.stats-section.grand-total h3 {
+  color: white;
 }
 
-.day-header .date {
-  margin: 0;
-  color: #666;
+.stats-table {
+  width: 100%;
+}
+
+.stats-table-header {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr 2fr;
+  gap: 15px;
+  padding: 15px 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 10px;
   font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-.stats-content {
-  margin-bottom: 20px;
+.stats-section.grand-total .stats-table-header {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
 }
 
-.stat-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 10px 0;
-  border-bottom: 1px solid #f0f0f0;
+.stats-table-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr 2fr;
+  gap: 15px;
+  padding: 15px 20px;
+  border-bottom: 1px solid #e0e0e0;
+  transition: background 0.2s;
+  align-items: center;
 }
 
-.stat-row:last-child {
+.stats-table-row:hover {
+  background: #f8f9fa;
+}
+
+.stats-section.grand-total .stats-table-row:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.stats-table-row:last-child {
   border-bottom: none;
 }
 
-.stat-row .label {
-  color: #666;
-  font-size: 14px;
+.stats-table-row.total-row {
+  background: #f8f9fa;
+  border-top: 2px solid #667eea;
+  margin-top: 10px;
 }
 
-.stat-row .value {
-  font-weight: bold;
-  font-size: 18px;
+.stats-table-row.total-row:hover {
+  background: #f0f0f0;
 }
 
-.value.sold {
-  color: #667eea;
+.stats-section.grand-total .stats-table-row.total-row {
+  background: rgba(255, 255, 255, 0.2);
+  border-top: 2px solid white;
 }
 
-.value.scanned {
+.stats-section.grand-total .stats-table-row.total-row:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.stats-col {
+  display: flex;
+  align-items: center;
+  font-size: 15px;
+  color: #333;
+}
+
+.stats-section.grand-total .stats-col {
+  color: white;
+}
+
+.stats-col.type {
+  font-weight: 500;
+}
+
+.stats-col.scanned-value {
   color: #4CAF50;
+  font-weight: 600;
 }
 
-.value.remaining {
-  color: #FF9800;
+.stats-section.grand-total .stats-col.scanned-value {
+  color: #a8ff9d;
 }
 
-.progress-section {
-  margin-top: 20px;
+.stats-col.progress {
+  display: flex;
+  align-items: center;
+  gap: 15px;
 }
 
 .progress-bar {
-  width: 100%;
+  flex: 1;
   height: 20px;
   background: #e0e0e0;
   border-radius: 10px;
   overflow: hidden;
-  margin-bottom: 10px;
+}
+
+.stats-section.grand-total .progress-bar {
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .progress-fill {
@@ -470,188 +438,49 @@ export default {
   transition: width 0.3s ease;
 }
 
-.percentage {
-  text-align: center;
-  color: #666;
+.progress-fill.total {
+  background: linear-gradient(90deg, #4CAF50 0%, #45a049 100%);
+}
+
+.progress-fill.grand-total {
+  background: linear-gradient(90deg, #fff 0%, #f0f0f0 100%);
+}
+
+.progress-text {
+  min-width: 50px;
+  text-align: right;
   font-size: 14px;
+  color: #666;
   font-weight: 500;
-  margin: 0;
 }
 
-.summary-card {
-  background: white;
-  border-radius: 12px;
-  padding: 30px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+.stats-section.grand-total .progress-text {
+  color: white;
 }
 
-.summary-card h3 {
-  margin: 0 0 25px 0;
-  color: #333;
-  font-size: 24px;
-}
-
-.summary-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 30px;
-}
-
-.summary-item {
-  text-align: center;
-  padding: 20px;
-  background: #f8f9fa;
-  border-radius: 8px;
-}
-
-.summary-value {
-  font-size: 36px;
-  font-weight: bold;
-  color: #667eea;
-  margin-bottom: 10px;
-}
-
-.summary-label {
-  color: #666;
-  font-size: 14px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.breakdown-section {
-  margin-top: 20px;
-  padding-top: 20px;
-  border-top: 2px solid #e0e0e0;
-}
-
-.breakdown-title {
-  font-weight: 600;
-  color: #333;
-  margin-bottom: 12px;
-  font-size: 15px;
-}
-
-.breakdown-items {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.breakdown-item {
-  display: flex;
-  justify-content: space-between;
-  padding: 8px 12px;
-  background: #f8f9fa;
-  border-radius: 6px;
-}
-
-.breakdown-label {
-  color: #666;
+.note {
+  margin: 15px 0 0 0;
   font-size: 13px;
+  color: #999;
+  font-style: italic;
 }
 
-.breakdown-value {
-  font-weight: 600;
-  color: #667eea;
-  font-size: 14px;
-}
+@media (max-width: 968px) {
+  .stats-table-header,
+  .stats-table-row {
+    grid-template-columns: 2fr 0.8fr 0.8fr 0.8fr 1.5fr;
+    gap: 10px;
+    padding: 12px 15px;
+  }
 
-.summary-breakdown {
-  margin-top: 30px;
-  padding-top: 30px;
-  border-top: 2px solid #e0e0e0;
-}
+  .stats-col {
+    font-size: 14px;
+  }
 
-.summary-breakdown h4 {
-  margin: 0 0 20px 0;
-  color: #333;
-  font-size: 20px;
-}
-
-.summary-breakdown-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 20px;
-}
-
-.summary-breakdown-item {
-  text-align: center;
-  padding: 15px;
-  background: #f8f9fa;
-  border-radius: 8px;
-  border: 2px solid #e0e0e0;
-}
-
-.summary-breakdown-value {
-  font-size: 28px;
-  font-weight: bold;
-  color: #667eea;
-  margin-bottom: 8px;
-}
-
-.summary-breakdown-label {
-  color: #666;
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.ticket-type-breakdown-card {
-  background: white;
-  border-radius: 12px;
-  padding: 30px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  margin-top: 30px;
-}
-
-.ticket-type-breakdown-card h3 {
-  margin: 0 0 25px 0;
-  color: #333;
-  font-size: 24px;
-}
-
-.ticket-type-table {
-  width: 100%;
-}
-
-.ticket-type-header {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr;
-  gap: 15px;
-  padding: 15px;
-  background: #f8f9fa;
-  border-radius: 8px;
-  font-weight: 600;
-  color: #333;
-  margin-bottom: 10px;
-}
-
-.ticket-type-row {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr;
-  gap: 15px;
-  padding: 15px;
-  border-bottom: 1px solid #e0e0e0;
-  transition: background 0.2s;
-}
-
-.ticket-type-row:hover {
-  background: #f8f9fa;
-}
-
-.ticket-type-row:last-child {
-  border-bottom: none;
-}
-
-.ticket-type-col {
-  display: flex;
-  align-items: center;
-  font-size: 15px;
-}
-
-.ticket-type-col.type-name {
-  font-weight: 500;
-  color: #333;
+  .progress-text {
+    min-width: 45px;
+    font-size: 13px;
+  }
 }
 
 @media (max-width: 768px) {
@@ -680,88 +509,61 @@ export default {
     margin-bottom: 20px;
   }
 
-  .stats-grid {
-    grid-template-columns: 1fr;
-    gap: 15px;
-  }
-
-  .day-card {
+  .stats-section {
     padding: 20px;
   }
 
-  .day-header h3 {
-    font-size: 20px;
-  }
-
-  .day-header .date {
-    font-size: 13px;
-  }
-
-  .stat-row {
-    padding: 8px 0;
-  }
-
-  .stat-row .label {
-    font-size: 13px;
-  }
-
-  .stat-row .value {
-    font-size: 16px;
-  }
-
-  .breakdown-title {
-    font-size: 14px;
-  }
-
-  .breakdown-item {
-    padding: 6px 10px;
-  }
-
-  .breakdown-label {
-    font-size: 12px;
-  }
-
-  .breakdown-value {
-    font-size: 13px;
-  }
-
-  .summary-card {
-    padding: 20px;
-  }
-
-  .summary-card h3 {
-    font-size: 20px;
+  .stats-section h3 {
+    font-size: 18px;
     margin-bottom: 20px;
   }
 
-  .summary-stats {
-    grid-template-columns: 1fr;
-    gap: 15px;
+  .stats-table-header {
+    display: none;
   }
 
-  .summary-item {
+  .stats-table-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
     padding: 15px;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    margin-bottom: 10px;
   }
 
-  .summary-value {
-    font-size: 28px;
+  .stats-col {
+    justify-content: space-between;
   }
 
-  .summary-label {
+  .stats-col::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: #666;
+    text-transform: uppercase;
     font-size: 12px;
+    letter-spacing: 0.5px;
   }
 
-  .summary-breakdown h4 {
-    font-size: 18px;
+  .stats-col.type::before {
+    content: 'Ticket Type';
   }
 
-  .summary-breakdown-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
+  .stats-col.progress {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
   }
 
-  .summary-breakdown-value {
-    font-size: 24px;
+  .progress-bar {
+    width: 100%;
+  }
+
+  .progress-text {
+    text-align: center;
+  }
+
+  .note {
+    font-size: 12px;
   }
 }
 </style>
