@@ -944,12 +944,6 @@ router.post('/:id/send-email', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'No email address on file for this ticket' });
     }
 
-    if (ticketResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Ticket not found' });
-    }
-
-    const ticket = ticketResult.rows[0];
-
     // Generate QR code with full URL
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost';
     const verifyUrl = `${frontendUrl}/verify/${ticket.uuid}`;
