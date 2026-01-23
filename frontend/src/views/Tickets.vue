@@ -554,7 +554,6 @@ export default {
       quantity: 1,
       supplies: []
     });
-    const emailJustChanged = ref(new Set());
 
     const studentTickets = computed(() => 
       tickets.value.filter(t => t.ticket_type === 'student').length
