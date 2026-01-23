@@ -526,15 +526,20 @@ router.patch('/:id/status', authMiddleware, async (req, res) => {
   }
 });
 
-// Edit ticket values (SuperAdmin only)
-router.put('/:id', authMiddleware, superAdminMiddleware, checkLockdown, async (req, res) => {
+// Edit ticket values (Admin/SuperAdmin)
+router.put('/:id', authMiddleware, checkLockdown, async (req, res) => {
+  // Allow both admin and superadmin
+  if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
   try {
     const { id } = req.params;
-    const { name, email, teacher_name, ticket_subtype } = req.body;
+    const { name, email, teacher_name, ticket_subtype, booth_range, quantity, supplies } = req.body;
 
     // Validate required fields
-    if (!name || !email) {
-      return res.status(400).json({ error: 'Name and email are required' });
+    if (!name) {
+      return res.status(400).json({ error: 'Name is required' });
     }
 
     // Get current ticket to check type
@@ -560,11 +565,27 @@ router.put('/:id', authMiddleware, superAdminMiddleware, checkLockdown, async (r
     // Update ticket
     const updateResult = await db.query(
       `UPDATE tickets 
-       SET name = $1, email = $2, teacher_name = $3, ticket_subtype = $4, updated_at = NOW()
-       WHERE id = $5
+       SET name = $1, email = $2, teacher_name = $3, ticket_subtype = $4, booth_range = $5, quantity = $6, updated_at = NOW()
+       WHERE id = $7
        RETURNING *`,
-      [name, email, teacher_name || null, ticket_subtype || null, id]
+      [name, email || null, teacher_name || null, ticket_subtype || null, booth_range || null, quantity || null, id]
     );
+
+    // Update supplies for exhibitor tickets
+    if (ticket.ticket_type === 'exhibitor' && supplies) {
+      // Delete existing supplies
+      await db.query('DELETE FROM ticket_supplies WHERE ticket_id = $1', [id]);
+      
+      // Insert new supplies
+      for (const supply of supplies) {
+        if (supply.name && supply.name.trim()) {
+          await db.query(
+            'INSERT INTO ticket_supplies (ticket_id, supply_name, quantity) VALUES ($1, $2, $3)',
+            [id, supply.name, supply.quantity || 1]
+          );
+        }
+      }
+    }
 
     console.log(`✏️  Ticket ${id} edited by ${req.user.email}`);
 

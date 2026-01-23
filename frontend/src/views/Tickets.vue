@@ -284,58 +284,99 @@
       <div class="modal-content exhibitor-modal" @click.stop>
         <div class="modal-header">
           <h2>Exhibitor Order Details</h2>
-          <button @click="closeExhibitorModal" class="btn-close">×</button>
+          <div class="modal-header-actions">
+            <button 
+              v-if="!editingExhibitor && (authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin')" 
+              @click="startExhibitorEdit" 
+              class="btn-edit-modal"
+            >
+              Edit
+            </button>
+            <button @click="closeExhibitorModal" class="btn-close">×</button>
+          </div>
         </div>
         <div class="modal-body">
           <div class="exhibitor-info">
-            <div class="info-row">
-              <strong>Exhibitor Name:</strong>
-              <span>{{ viewingExhibitorOrder.customerName }}</span>
-            </div>
-            <div class="info-row">
-              <strong>Email:</strong>
-              <div v-if="editingEmailForTicket === viewingExhibitorOrder.tickets[0].id" class="email-edit-container">
-                <input 
-                  v-model="emailEditValue" 
-                  type="email" 
-                  class="email-edit-input"
-                  placeholder="email@example.com"
-                />
-                <button @click="saveEmail(viewingExhibitorOrder.tickets[0])" class="btn-save-small">
-                  <font-awesome-icon icon="check" />
-                </button>
-                <button @click="cancelEmailEdit()" class="btn-cancel-small">
-                  <font-awesome-icon icon="times" />
-                </button>
+            <!-- View Mode -->
+            <template v-if="!editingExhibitor">
+              <div class="info-row">
+                <strong>Exhibitor Name:</strong>
+                <span>{{ viewingExhibitorOrder.customerName }}</span>
               </div>
-              <div v-else class="email-display">
-                <span>{{ viewingExhibitorOrder.customerEmail || '(no email)' }}</span>
-                <button @click="startEmailEdit(viewingExhibitorOrder.tickets[0])" class="btn-edit-small">
-                  <font-awesome-icon icon="pencil-alt" />
-                </button>
+              <div class="info-row">
+                <strong>Email:</strong>
+                <div v-if="editingEmailForTicket === viewingExhibitorOrder.tickets[0].id" class="email-edit-container">
+                  <input 
+                    v-model="emailEditValue" 
+                    type="email" 
+                    class="email-edit-input"
+                    placeholder="email@example.com"
+                  />
+                  <button @click="saveEmail(viewingExhibitorOrder.tickets[0])" class="btn-save-small">
+                    <font-awesome-icon icon="check" />
+                  </button>
+                  <button @click="cancelEmailEdit()" class="btn-cancel-small">
+                    <font-awesome-icon icon="times" />
+                  </button>
+                </div>
+                <div v-else class="email-display">
+                  <span>{{ viewingExhibitorOrder.customerEmail || '(no email)' }}</span>
+                  <button @click="startEmailEdit(viewingExhibitorOrder.tickets[0])" class="btn-edit-small">
+                    <font-awesome-icon icon="pencil-alt" />
+                  </button>
+                </div>
               </div>
-            </div>
-            <div class="info-row">
-              <strong>Order Type:</strong>
-              <span v-if="viewingExhibitorOrder.isShopifyOrder">
-                <font-awesome-icon icon="shopping-cart" /> Shopify Order
-              </span>
-              <span v-else>
-                <font-awesome-icon icon="hand-point-right" /> Manual Order
-              </span>
-            </div>
-            <div class="info-row">
-              <strong>Total Booths:</strong>
-              <span>{{ viewingExhibitorOrder.tickets[0].quantity || 1 }}</span>
-            </div>
-            <div class="info-row">
-              <strong>Booth Range:</strong>
-              <span>{{ viewingExhibitorOrder.tickets[0].booth_range || 'Not specified' }}</span>
-            </div>
-            <div class="info-row">
-              <strong>Exhibitor Passes Included:</strong>
-              <span>{{ (viewingExhibitorOrder.tickets[0].quantity || 1) * 2 }}</span>
-            </div>
+              <div class="info-row">
+                <strong>Order Type:</strong>
+                <span v-if="viewingExhibitorOrder.isShopifyOrder">
+                  <font-awesome-icon icon="shopping-cart" /> Shopify Order
+                </span>
+                <span v-else>
+                  <font-awesome-icon icon="hand-point-right" /> Manual Order
+                </span>
+              </div>
+              <div class="info-row">
+                <strong>Total Booths:</strong>
+                <span>{{ viewingExhibitorOrder.tickets[0].quantity || 1 }}</span>
+              </div>
+              <div class="info-row">
+                <strong>Booth Range:</strong>
+                <span>{{ viewingExhibitorOrder.tickets[0].booth_range || 'Not specified' }}</span>
+              </div>
+              <div class="info-row">
+                <strong>Exhibitor Passes Included:</strong>
+                <span>{{ (viewingExhibitorOrder.tickets[0].quantity || 1) * 2 }}</span>
+              </div>
+            </template>
+
+            <!-- Edit Mode -->
+            <template v-else>
+              <div class="form-group">
+                <label>Exhibitor Name *</label>
+                <input v-model="exhibitorEditForm.name" type="text" required />
+              </div>
+              <div class="form-group">
+                <label>Email</label>
+                <input v-model="exhibitorEditForm.email" type="email" />
+              </div>
+              <div class="form-group">
+                <label>Total Booths *</label>
+                <input v-model.number="exhibitorEditForm.quantity" type="number" min="1" required />
+              </div>
+              <div class="form-group">
+                <label>Booth Range *</label>
+                <input v-model="exhibitorEditForm.booth_range" type="text" placeholder="e.g., 101-104" required />
+              </div>
+              <div class="form-group">
+                <label>Supplies</label>
+                <div v-for="(supply, index) in exhibitorEditForm.supplies" :key="index" class="supply-edit-row">
+                  <input v-model="supply.name" type="text" placeholder="Supply name" />
+                  <input v-model.number="supply.quantity" type="number" min="1" placeholder="Qty" />
+                  <button @click="removeExhibitorSupply(index)" class="btn-remove-small" :disabled="exhibitorEditForm.supplies.length === 1">×</button>
+                </div>
+                <button @click="addExhibitorSupply" class="btn-add-supply">+ Add Supply</button>
+              </div>
+            </template>
             <div class="info-row">
               <strong>Status:</strong>
               <span :class="['status', { used: viewingExhibitorOrder.tickets[0].is_used }]">
@@ -405,6 +446,10 @@
               Close
             </button>
           </div>
+        </div>
+        <div v-if="editingExhibitor" class="modal-footer">
+          <button @click="saveExhibitorEdits" class="btn-save" :disabled="saving">Save Changes</button>
+          <button @click="cancelExhibitorEdit" class="btn-cancel" :disabled="saving">Cancel</button>
         </div>
       </div>
     </div>
@@ -500,6 +545,15 @@ export default {
     
     const editingEmailForTicket = ref(null);
     const emailEditValue = ref('');
+    const emailJustChanged = ref(new Set());
+    const editingExhibitor = ref(false);
+    const exhibitorEditForm = ref({
+      name: '',
+      email: '',
+      booth_range: '',
+      quantity: 1,
+      supplies: []
+    });
     const emailJustChanged = ref(new Set());
 
     const studentTickets = computed(() => 
@@ -712,6 +766,56 @@ export default {
 
     const closeExhibitorModal = () => {
       viewingExhibitorOrder.value = null;
+      editingExhibitor.value = false;
+    };
+
+    const startExhibitorEdit = () => {
+      const ticket = viewingExhibitorOrder.value.tickets[0];
+      exhibitorEditForm.value = {
+        name: ticket.name,
+        email: ticket.email || '',
+        booth_range: ticket.booth_range || '',
+        quantity: ticket.quantity || 1,
+        supplies: ticket.supplies ? [...ticket.supplies] : []
+      };
+      editingExhibitor.value = true;
+    };
+
+    const cancelExhibitorEdit = () => {
+      editingExhibitor.value = false;
+    };
+
+    const addExhibitorSupply = () => {
+      exhibitorEditForm.value.supplies.push({ name: '', quantity: 1 });
+    };
+
+    const removeExhibitorSupply = (index) => {
+      if (exhibitorEditForm.value.supplies.length > 1) {
+        exhibitorEditForm.value.supplies.splice(index, 1);
+      }
+    };
+
+    const saveExhibitorEdits = async () => {
+      saving.value = true;
+      
+      try {
+        const ticketId = viewingExhibitorOrder.value.tickets[0].id;
+        await axios.put(`/api/tickets/${ticketId}`, exhibitorEditForm.value);
+        
+        // Reload tickets to get updated data
+        await loadTickets();
+        
+        // Close modal and edit mode
+        editingExhibitor.value = false;
+        viewingExhibitorOrder.value = null;
+        
+        alert('Exhibitor ticket updated successfully!');
+      } catch (err) {
+        console.error('Error updating exhibitor ticket:', err);
+        alert('Failed to update exhibitor ticket. Please try again.');
+      } finally {
+        saving.value = false;
+      }
     };
 
     const saveTicketEdits = async () => {
@@ -892,6 +996,13 @@ export default {
       startEmailEdit,
       cancelEmailEdit,
       saveEmail,
+      editingExhibitor,
+      exhibitorEditForm,
+      startExhibitorEdit,
+      cancelExhibitorEdit,
+      saveExhibitorEdits,
+      addExhibitorSupply,
+      removeExhibitorSupply,
     };
   },
 };
@@ -1662,6 +1773,120 @@ tr:hover td {
 
 .btn-send-email.email-changed:hover {
   background: #ed8936;
+}
+
+.modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-edit-modal {
+  background: #667eea;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.btn-edit-modal:hover {
+  background: #5568d3;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: #333;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.supply-edit-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.supply-edit-row input:first-child {
+  flex: 2;
+}
+
+.supply-edit-row input:nth-child(2) {
+  flex: 0 0 80px;
+}
+
+.btn-add-supply {
+  background: #48bb78;
+  color: white;
+  border: none;
+  padding: 0.4rem 0.8rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.btn-add-supply:hover {
+  background: #38a169;
+}
+
+.modal-footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid #e0e0e0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.btn-save {
+  background: #48bb78;
+  color: white;
+  border: none;
+  padding: 0.6rem 1.2rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.btn-save:hover:not(:disabled) {
+  background: #38a169;
+}
+
+.btn-save:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-cancel {
+  background: #718096;
+  color: white;
+  border: none;
+  padding: 0.6rem 1.2rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.btn-cancel:hover:not(:disabled) {
+  background: #4a5568;
+}
+
+.btn-cancel:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 @keyframes pulse {

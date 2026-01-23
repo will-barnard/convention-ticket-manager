@@ -130,6 +130,18 @@
                   <p class="hint">{{ ticket.quantity }} booth{{ ticket.quantity > 1 ? 's' : '' }} required for {{ ticket.quantity }} ticket{{ ticket.quantity > 1 ? 's' : '' }}</p>
                 </div>
 
+                <!-- Half Booth Checkbox -->
+                <div v-if="ticket.ticketType === 'exhibitor'" class="form-group">
+                  <div class="checkbox-wrapper">
+                    <input
+                      :id="'halfBooth' + index"
+                      v-model="ticket.halfBooth"
+                      type="checkbox"
+                    />
+                    <label :for="'halfBooth' + index">Half Booth (1 exhibitor pass instead of 2)</label>
+                  </div>
+                </div>
+
                 <!-- Exhibitor Supplies Section -->
                 <div v-if="ticket.ticketType === 'exhibitor'" class="supplies-subsection">
                   <label>Included & Additional Supplies</label>
@@ -144,7 +156,7 @@
                     />
                     <input
                       type="number"
-                      :value="ticket.quantity * 2"
+                      :value="ticket.quantity * (ticket.halfBooth ? 1 : 2)"
                       disabled
                       class="supply-included-input"
                     />
@@ -250,6 +262,7 @@ export default {
         teacherName: '',
         quantity: null,
         boothRange: '',
+        halfBooth: false,
         supplies: [{ name: '', quantity: 1 }]
       }]
     });
@@ -281,6 +294,7 @@ export default {
       if (ticket.ticketType !== 'exhibitor') {
         ticket.supplies = [{ name: '', quantity: 1 }];
         ticket.boothRange = '';
+        ticket.halfBooth = false;
       }
       if (ticket.ticketType !== 'attendee') {
         ticket.ticketSubtype = '';
@@ -295,6 +309,7 @@ export default {
         teacherName: '',
         quantity: 1,
         boothRange: '',
+        halfBooth: false,
         supplies: [{ name: '', quantity: 1 }]
       });
     };
@@ -342,8 +357,8 @@ export default {
             if (ticket.ticketType === 'exhibitor') {
               t.boothRange = ticket.boothRange;
               
-              // Add base exhibitor passes (2x ticket quantity)
-              const baseExhibitorPasses = ticket.quantity * 2;
+              // Add base exhibitor passes (2x ticket quantity for full booth, 1x for half booth)
+              const baseExhibitorPasses = ticket.quantity * (ticket.halfBooth ? 1 : 2);
               
               // Get extra exhibitor passes from supplies
               const extraPasses = ticket.supplies
@@ -397,6 +412,7 @@ export default {
         teacherName: '',
         quantity: 1,
         boothRange: '',
+        halfBooth: false,
         supplies: [{ name: '', quantity: 1 }]
       }];
       error.value = '';
