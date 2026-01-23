@@ -967,6 +967,7 @@ export default {
       studentTickets,
       exhibitorTickets,
       attendeeTickets,
+      noEmailTickets,
       filteredTickets,
       loadTickets,
       deleteTicket,
