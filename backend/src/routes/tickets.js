@@ -565,7 +565,7 @@ router.put('/:id', authMiddleware, checkLockdown, async (req, res) => {
     // Update ticket
     const updateResult = await db.query(
       `UPDATE tickets 
-       SET name = $1, email = $2, teacher_name = $3, ticket_subtype = $4, booth_range = $5, quantity = $6, updated_at = NOW()
+       SET name = $1, email = $2, teacher_name = $3, ticket_subtype = $4, booth_range = $5, quantity = $6
        WHERE id = $7
        RETURNING *`,
       [name, email || null, teacher_name || null, ticket_subtype || null, booth_range || null, quantity || null, id]
