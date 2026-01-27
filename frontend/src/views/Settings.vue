@@ -167,6 +167,30 @@
         
         <form @submit.prevent="saveSettings">
           <div class="form-group">
+            <label for="timezone">Convention Time Zone</label>
+            <select
+              id="timezone"
+              v-model="settings.timezone"
+              required
+            >
+              <option value="America/New_York">Eastern Time (ET)</option>
+              <option value="America/Chicago">Central Time (CT)</option>
+              <option value="America/Denver">Mountain Time (MT)</option>
+              <option value="America/Phoenix">Arizona Time (MST - no DST)</option>
+              <option value="America/Los_Angeles">Pacific Time (PT)</option>
+              <option value="America/Anchorage">Alaska Time (AKT)</option>
+              <option value="Pacific/Honolulu">Hawaii Time (HST)</option>
+              <option value="America/Toronto">Toronto (ET)</option>
+              <option value="America/Vancouver">Vancouver (PT)</option>
+              <option value="Europe/London">London (GMT/BST)</option>
+              <option value="Europe/Paris">Paris (CET/CEST)</option>
+              <option value="Asia/Tokyo">Tokyo (JST)</option>
+              <option value="Australia/Sydney">Sydney (AEDT/AEST)</option>
+            </select>
+            <p class="hint">Set the timezone where the convention takes place for accurate ticket validation</p>
+          </div>
+
+          <div class="form-group">
             <label for="fridayDate">Friday Date</label>
             <input
               type="date"
@@ -386,7 +410,8 @@ export default {
       friday_date: null,
       saturday_date: null,
       sunday_date: null,
-      auto_send_emails: true
+      auto_send_emails: true,
+      timezone: 'America/Chicago'
     });
     const logoPreview = ref(null);
     const logoInput = ref(null);
@@ -489,7 +514,8 @@ export default {
           friday_date: settings.value.friday_date,
           saturday_date: settings.value.saturday_date,
           sunday_date: settings.value.sunday_date,
-          auto_send_emails: settings.value.auto_send_emails
+          auto_send_emails: settings.value.auto_send_emails,
+          timezone: settings.value.timezone
         });
 
         // Upload logo if selected
@@ -1111,8 +1137,20 @@ export default {
   transition: border-color 0.3s;
 }
 
+.form-group select {
+  width: 100%;
+  padding: 0.75rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: border-color 0.3s;
+  background: white;
+  cursor: pointer;
+}
+
 .form-group input[type="text"]:focus,
-.form-group input[type="number"]:focus {
+.form-group input[type="number"]:focus,
+.form-group select:focus {
   outline: none;
   border-color: #667eea;
 }

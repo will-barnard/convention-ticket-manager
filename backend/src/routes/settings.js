@@ -54,7 +54,8 @@ router.get('/', async (req, res) => {
         saturday_date: null,
         sunday_date: null,
         auto_send_emails: true,
-        lockdown_mode: false
+        lockdown_mode: false,
+        timezone: 'America/Chicago'
       });
     }
     res.json(result.rows[0]);
@@ -67,7 +68,7 @@ router.get('/', async (req, res) => {
 // Update settings
 router.put('/', auth, async (req, res) => {
   try {
-    const { convention_name, enable_ticket_cap, ticket_cap, friday_date, saturday_date, sunday_date, auto_send_emails } = req.body;
+    const { convention_name, enable_ticket_cap, ticket_cap, friday_date, saturday_date, sunday_date, auto_send_emails, timezone } = req.body;
     
     // Check if settings exist
     const checkResult = await db.query('SELECT * FROM settings LIMIT 1');
@@ -75,15 +76,15 @@ router.put('/', auth, async (req, res) => {
     if (checkResult.rows.length === 0) {
       // Insert new settings
       const result = await db.query(
-        'INSERT INTO settings (convention_name, enable_ticket_cap, ticket_cap, friday_date, saturday_date, sunday_date, auto_send_emails, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) RETURNING *',
-        [convention_name, enable_ticket_cap || false, ticket_cap || 0, friday_date || null, saturday_date || null, sunday_date || null, auto_send_emails !== undefined ? auto_send_emails : true]
+        'INSERT INTO settings (convention_name, enable_ticket_cap, ticket_cap, friday_date, saturday_date, sunday_date, auto_send_emails, timezone, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW()) RETURNING *',
+        [convention_name, enable_ticket_cap || false, ticket_cap || 0, friday_date || null, saturday_date || null, sunday_date || null, auto_send_emails !== undefined ? auto_send_emails : true, timezone || 'America/Chicago']
       );
       res.json(result.rows[0]);
     } else {
       // Update existing settings
       const result = await db.query(
-        'UPDATE settings SET convention_name = $1, enable_ticket_cap = $2, ticket_cap = $3, friday_date = $4, saturday_date = $5, sunday_date = $6, auto_send_emails = $7, updated_at = NOW() WHERE id = $8 RETURNING *',
-        [convention_name, enable_ticket_cap || false, ticket_cap || 0, friday_date || null, saturday_date || null, sunday_date || null, auto_send_emails !== undefined ? auto_send_emails : true, checkResult.rows[0].id]
+        'UPDATE settings SET convention_name = $1, enable_ticket_cap = $2, ticket_cap = $3, friday_date = $4, saturday_date = $5, sunday_date = $6, auto_send_emails = $7, timezone = $8, updated_at = NOW() WHERE id = $9 RETURNING *',
+        [convention_name, enable_ticket_cap || false, ticket_cap || 0, friday_date || null, saturday_date || null, sunday_date || null, auto_send_emails !== undefined ? auto_send_emails : true, timezone || 'America/Chicago', checkResult.rows[0].id]
       );
       res.json(result.rows[0]);
     }

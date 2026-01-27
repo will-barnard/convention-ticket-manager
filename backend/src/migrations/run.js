@@ -175,6 +175,21 @@ async function runMigrations() {
       ON email_send_log(sent_at)
     `);
     console.log('✓ Email send log index created');
+    
+    // Add timezone column to settings table
+    await db.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'settings' AND column_name = 'timezone'
+        ) THEN
+          ALTER TABLE settings ADD COLUMN timezone VARCHAR(100) DEFAULT 'America/Chicago';
+        END IF;
+      END $$;
+    `);
+    console.log('✓ Timezone field added to settings table');
+    
     console.log('Migrations completed successfully!');
     process.exit(0);
   } catch (error) {
