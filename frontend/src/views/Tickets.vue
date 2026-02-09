@@ -88,6 +88,7 @@
                 <th v-if="filterType === 'student'">Teacher</th>
                 <th v-if="filterType === 'attendee'">Check-in Status</th>
                 <th>Email</th>
+                <th>Email Status</th>
                 <th v-if="filterType !== 'attendee'">Status</th>
                 <th>Validity</th>
                 <th>Created</th>
@@ -123,6 +124,14 @@
                   <td v-if="filterType === 'student'"></td>
                   <td v-if="filterType === 'attendee'"></td>
                   <td>{{ group.customerEmail }}</td>
+                  <td>
+                    <span v-if="filterType === 'exhibitor'" :class="['email-status-badge', { sent: group.tickets[0].email_sent }]">
+                      {{ group.tickets[0].email_sent ? 'Sent' : 'Not Sent' }}
+                    </span>
+                    <span v-else class="email-status-summary">
+                      {{ group.tickets.filter(t => t.email_sent).length }} / {{ group.tickets.length }} sent
+                    </span>
+                  </td>
                   <td v-if="filterType !== 'attendee'">
                     <span v-if="filterType === 'exhibitor'" :class="['status', { used: group.tickets[0].is_used }]">
                       {{ group.tickets[0].is_used ? 'Used' : 'Available' }}
@@ -159,6 +168,14 @@
                         title="Delete exhibitor ticket"
                       >
                         Delete
+                      </button>
+                      <button 
+                        v-else-if="(authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin') && group.tickets.length === 1 && group.tickets.some(t => !t.email_sent)"
+                        @click.stop="sendAllTicketsEmail(group)"
+                        class="btn-send-all"
+                        title="Send ticket email"
+                      >
+                        Send Email
                       </button>
                       <button 
                         v-else-if="(authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin') && group.tickets.length > 1 && group.tickets.some(t => !t.email_sent)"
@@ -216,6 +233,22 @@
                         <span>{{ ticket.email || '(no email)' }}</span>
                         <button @click="startEmailEdit(ticket)" class="btn-edit-small">
                           <font-awesome-icon icon="pencil-alt" />
+                        </button>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="email-status-cell">
+                        <span :class="['email-status-badge', { sent: ticket.email_sent }]">
+                          {{ ticket.email_sent ? 'Sent' : 'Not Sent' }}
+                        </span>
+                        <button 
+                          v-if="(authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin') && ticket.email_sent && ticket.email" 
+                          @click="sendTicketEmail(ticket.id)" 
+                          class="btn-resend-email"
+                          title="Resend ticket email"
+                        >
+                          <font-awesome-icon icon="redo" />
+                          Resend
                         </button>
                       </div>
                     </td>
@@ -1342,6 +1375,52 @@ tr:hover td {
 
 .btn-send-email:hover {
   background: #1976D2;
+}
+
+.btn-resend-email {
+  padding: 6px 10px;
+  background: #FF9800;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.btn-resend-email:hover {
+  background: #F57C00;
+}
+
+.email-status-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.email-status-badge {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  background: #e0e0e0;
+  color: #757575;
+}
+
+.email-status-badge.sent {
+  background: #c8e6c9;
+  color: #2e7d32;
+}
+
+.email-status-summary {
+  font-size: 13px;
+  color: #666;
+  font-weight: 500;
 }
 
 .scan-status {
