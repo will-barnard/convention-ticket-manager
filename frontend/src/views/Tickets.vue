@@ -1410,6 +1410,7 @@ tr:hover td {
   font-weight: 500;
   background: #e0e0e0;
   color: #757575;
+  white-space: nowrap;
 }
 
 .email-status-badge.sent {
