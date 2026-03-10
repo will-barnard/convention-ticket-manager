@@ -362,7 +362,11 @@ async function retryOrderCreate(webhookData, webhookLogId) {
 
 async function retryRefund(webhookData, webhookLogId) {
   const { sendAdminNotification } = require('../services/email');
-  const { id: order_id, refunds } = webhookData;
+  const { order_id, refund_line_items, transactions } = webhookData; // Fixed: use order_id instead of id
+  
+  console.log(`💰 Retrying refund for order ${order_id}`);
+  console.log(`   Refund line items: ${refund_line_items?.length || 0}`);
+  console.log(`   Transactions: ${transactions?.length || 0}`);
   
   // Find tickets for this order
   const ticketsResult = await db.query(
@@ -398,7 +402,7 @@ async function retryRefund(webhookData, webhookLogId) {
     await sendAdminNotification({
       subject: `Order Refunded - ${updateResult.rows.length} Ticket(s) Invalidated`,
       message: `Order #${order_id} has been refunded (retry processing).`,
-      ticketDetails: `The following tickets have been marked as refunded:\n\n${ticketList}\n\nRefund Details:\n${JSON.stringify(refunds, null, 2)}`
+      ticketDetails: `The following tickets have been marked as refunded:\n\n${ticketList}\n\nRefund Details:\nRefund Line Items: ${refund_line_items?.length || 0}\nTransactions: ${transactions?.length || 0}\n\nFirst Transaction: ${JSON.stringify(transactions?.[0], null, 2)}`
     });
   } catch (emailError) {
     console.error('Admin notification failed during retry:', emailError);

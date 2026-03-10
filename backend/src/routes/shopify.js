@@ -380,9 +380,13 @@ router.post('/create-ticket', validateShopifyHmac, checkLockdown, async (req, re
 router.post('/refund', validateShopifyHmac, async (req, res) => {
   let webhookLogId = null;
   
-  const { id: order_id, refunds } = req.body;
+  const { order_id, refund_line_items, transactions } = req.body; // Fixed: use order_id instead of id
   
   try {
+    console.log(`💰 Processing refund for order ${order_id}`);
+    console.log(`   Refund line items: ${refund_line_items?.length || 0}`);
+    console.log(`   Transactions: ${transactions?.length || 0}`);
+    
     // Log webhook
     const logResult = await db.query(
       `INSERT INTO webhook_logs (shopify_order_id, webhook_data, processed, webhook_type, created_at) 
@@ -437,7 +441,7 @@ router.post('/refund', validateShopifyHmac, async (req, res) => {
     await sendAdminNotification({
       subject: `Order Refunded - ${ticketsResult.rows.length} Ticket(s) Invalidated`,
       message: `Order #${order_id} has been refunded.`,
-      ticketDetails: `The following tickets have been marked as refunded:\n\n${ticketList}\n\nRefund Details:\n${JSON.stringify(refunds, null, 2)}`
+      ticketDetails: `The following tickets have been marked as refunded:\n\n${ticketList}\n\nRefund Details:\nRefund Line Items: ${refund_line_items?.length || 0}\nTransactions: ${transactions?.length || 0}\n\nFirst Transaction: ${JSON.stringify(transactions?.[0], null, 2)}`
     });
     
     // Mark webhook as processed
