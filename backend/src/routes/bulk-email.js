@@ -90,7 +90,26 @@ router.post('/send', authMiddleware, superAdminMiddleware, async (req, res) => {
       });
     }
     
-    // Check daily email limit
+    // Get tickets based on selected types - only include valid tickets
+    const placeholders = ticketTypes.map((_, i) => `$${i + 1}`).join(', ');
+    const query = `
+      SELECT DISTINCT email, name, ticket_type
+      FROM tickets
+      WHERE ticket_type IN (${placeholders})
+      AND email IS NOT NULL
+      AND email != ''
+      AND (status IS NULL OR status = 'valid')
+      ORDER BY email
+    `;
+
+    const result = await db.query(query, ticketTypes);
+    const recipients = result.rows;
+
+    if (recipients.length === 0) {
+      return res.status(400).json({ error: 'No valid recipients found for selected ticket types' });
+    }
+    
+    // Check daily email limit after getting recipients count
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     
@@ -113,27 +132,6 @@ router.post('/send', authMiddleware, superAdminMiddleware, async (req, res) => {
       return res.status(429).json({ 
         error: `Cannot send ${recipients.length} emails. Only ${remaining} emails remaining in today's quota of 100.`
       });
-    }
-
-    // Get tickets based on selected types
-    const placeholders = ticketTypes.map((_, i) => `$${i + 1}`).join(', ');
-    const query = `
-      SELECT DISTINCT email, name, ticket_type
-      FROM tickets
-      WHERE ticket_type IN (${placeholders})
-      AND email IS NOT NULL
-      AND email != ''
-      AND status != 'invalid'
-      AND status != 'refunded'
-      AND status != 'chargeback'
-      ORDER BY email
-    `;
-
-    const result = await db.query(query, ticketTypes);
-    const recipients = result.rows;
-
-    if (recipients.length === 0) {
-      return res.status(400).json({ error: 'No valid recipients found for selected ticket types' });
     }
 
     // Update rate limit timestamp
@@ -224,9 +222,7 @@ router.post('/preview', authMiddleware, superAdminMiddleware, async (req, res) =
       WHERE ticket_type IN (${placeholders})
       AND email IS NOT NULL
       AND email != ''
-      AND status != 'invalid'
-      AND status != 'refunded'
-      AND status != 'chargeback'
+      AND (status IS NULL OR status = 'valid')
       GROUP BY ticket_type
     `;
 

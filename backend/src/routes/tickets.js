@@ -742,8 +742,8 @@ router.post('/batch-send-emails', authMiddleware, async (req, res) => {
       });
     }
     
-    // Build query based on ticket type filter
-    let query = 'SELECT id, ticket_type, ticket_subtype, name, teacher_name, email, uuid FROM tickets WHERE (email_sent = false OR email_sent IS NULL) AND email IS NOT NULL';
+    // Build query based on ticket type filter - only include valid tickets
+    let query = 'SELECT id, ticket_type, ticket_subtype, name, teacher_name, email, uuid FROM tickets WHERE (email_sent = false OR email_sent IS NULL) AND email IS NOT NULL AND (status IS NULL OR status = \'valid\')';
     const params = [];
     
     if (ticketType && ticketType !== 'all') {
@@ -948,9 +948,9 @@ router.post('/:id/send-email', authMiddleware, async (req, res) => {
   const ticketId = parseInt(req.params.id);
 
   try {
-    // Get ticket details
+    // Get ticket details including status
     const ticketResult = await db.query(
-      'SELECT id, ticket_type, ticket_subtype, name, teacher_name, email, uuid FROM tickets WHERE id = $1',
+      'SELECT id, ticket_type, ticket_subtype, name, teacher_name, email, uuid, status FROM tickets WHERE id = $1',
       [ticketId]
     );
 
@@ -959,6 +959,14 @@ router.post('/:id/send-email', authMiddleware, async (req, res) => {
     }
 
     const ticket = ticketResult.rows[0];
+
+    // Check if ticket is valid (only send emails for valid tickets)
+    if (ticket.status && ticket.status !== 'valid') {
+      return res.status(400).json({ 
+        error: `Cannot send email for ${ticket.status} ticket. Only valid tickets can receive QR codes.`,
+        status: ticket.status 
+      });
+    }
 
     // Check if email exists
     if (!ticket.email) {
@@ -1020,9 +1028,9 @@ router.post('/send-order-email', authMiddleware, async (req, res) => {
   }
 
   try {
-    // Get all tickets
+    // Get all tickets including status
     const ticketsResult = await db.query(
-      'SELECT id, ticket_type, ticket_subtype, name, email, uuid FROM tickets WHERE id = ANY($1)',
+      'SELECT id, ticket_type, ticket_subtype, name, email, uuid, status FROM tickets WHERE id = ANY($1)',
       [ticketIds]
     );
 
@@ -1032,9 +1040,20 @@ router.post('/send-order-email', authMiddleware, async (req, res) => {
 
     const tickets = ticketsResult.rows;
 
-    // Generate QR codes for all tickets
+    // Filter out non-valid tickets
+    const invalidTickets = tickets.filter(t => t.status && t.status !== 'valid');
+    if (invalidTickets.length > 0) {
+      const invalidStatuses = invalidTickets.map(t => `${t.name} (${t.status})`).join(', ');
+      return res.status(400).json({ 
+        error: `Cannot send email for non-valid tickets. The following tickets have invalid status: ${invalidStatuses}. Only valid tickets can receive QR codes.`
+      });
+    }
+
+    const validTickets = tickets.filter(t => !t.status || t.status === 'valid');
+
+    // Generate QR codes for all valid tickets
     const ticketsWithQR = await Promise.all(
-      tickets.map(async (ticket) => {
+      validTickets.map(async (ticket) => {
         const frontendUrl = process.env.FRONTEND_URL || 'http://localhost';
         const verifyUrl = `${frontendUrl}/verify/${ticket.uuid}`;
         const qrCodeDataUrl = await QRCode.toDataURL(verifyUrl);
@@ -1050,18 +1069,19 @@ router.post('/send-order-email', authMiddleware, async (req, res) => {
     // Send consolidated email
     await emailService.sendTicketEmail({
       to: customerEmail,
-      name: customerName || tickets[0].name,
+      name: customerName || validTickets[0].name,
       tickets: ticketsWithQR
     });
 
-    // Mark all tickets as sent
+    // Mark all valid tickets as sent
+    const validTicketIds = validTickets.map(t => t.id);
     await db.query(
       'UPDATE tickets SET email_sent = true, email_sent_at = NOW() WHERE id = ANY($1)',
-      [ticketIds]
+      [validTicketIds]
     );
     
-    // Log the email send for each ticket
-    for (const ticket of tickets) {
+    // Log the email send for each valid ticket
+    for (const ticket of validTickets) {
       await db.query(
         'INSERT INTO email_send_log (recipient_email, ticket_id, send_type, success) VALUES ($1, $2, $3, $4)',
         [customerEmail, ticket.id, 'order_send', true]
@@ -1070,7 +1090,7 @@ router.post('/send-order-email', authMiddleware, async (req, res) => {
 
     res.json({ 
       message: 'Consolidated email sent successfully',
-      ticketsSent: tickets.length 
+      ticketsSent: validTickets.length 
     });
   } catch (error) {
     console.error('Error sending order email:', error);
