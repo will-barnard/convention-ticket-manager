@@ -416,13 +416,18 @@ router.post('/refund', validateShopifyHmac, async (req, res) => {
       });
     }
     
+    console.log(`🔄 Attempting to mark ${ticketsResult.rows.length} ticket(s) as refunded for order ${order_id}`);
+    
     // Update all tickets for this order to refunded status
-    await db.query(
-      'UPDATE tickets SET status = $1 WHERE shopify_order_id = $2',
+    const updateResult = await db.query(
+      'UPDATE tickets SET status = $1 WHERE shopify_order_id = $2 RETURNING id, uuid, status',
       ['refunded', String(order_id)]
     );
     
-    console.log(`✅ Marked ${ticketsResult.rows.length} ticket(s) as refunded for order ${order_id}`);
+    console.log(`✅ Successfully updated ${updateResult.rows.length} ticket(s) to refunded status:`);
+    updateResult.rows.forEach(ticket => {
+      console.log(`   - Ticket ${ticket.id} (${ticket.uuid}) -> status: ${ticket.status}`);
+    });
     
     // Send admin notification
     const ticketList = ticketsResult.rows.map(t => 
@@ -442,13 +447,14 @@ router.post('/refund', validateShopifyHmac, async (req, res) => {
            processed_at = NOW(), 
            tickets_created = $1
        WHERE id = $2`,
-      [ticketsResult.rows.length, webhookLogId]
+      [updateResult.rows.length, webhookLogId]
     );
     
     res.status(200).json({
       success: true,
-      message: `Marked ${ticketsResult.rows.length} ticket(s) as refunded`,
-      tickets_updated: ticketsResult.rows.length
+      message: `Marked ${updateResult.rows.length} ticket(s) as refunded`,
+      tickets_updated: updateResult.rows.length,
+      updated_tickets: updateResult.rows.map(t => ({ id: t.id, uuid: t.uuid, status: t.status }))
     });
     
   } catch (error) {
@@ -598,13 +604,18 @@ router.post('/cancel', validateShopifyHmac, async (req, res) => {
       });
     }
     
+    console.log(`🔄 Attempting to mark ${ticketsResult.rows.length} ticket(s) as cancelled for order ${order_id}`);
+    
     // Update all tickets for this order to cancelled status
-    await db.query(
-      'UPDATE tickets SET status = $1 WHERE shopify_order_id = $2',
+    const updateResult = await db.query(
+      'UPDATE tickets SET status = $1 WHERE shopify_order_id = $2 RETURNING id, uuid, status',
       ['cancelled', String(order_id)]
     );
     
-    console.log(`✅ Marked ${ticketsResult.rows.length} ticket(s) as cancelled for order ${order_id}`);
+    console.log(`✅ Successfully updated ${updateResult.rows.length} ticket(s) to cancelled status:`);
+    updateResult.rows.forEach(ticket => {
+      console.log(`   - Ticket ${ticket.id} (${ticket.uuid}) -> status: ${ticket.status}`);
+    });
     
     // Send admin notification
     const ticketList = ticketsResult.rows.map(t => 
@@ -624,13 +635,14 @@ router.post('/cancel', validateShopifyHmac, async (req, res) => {
            processed_at = NOW(), 
            tickets_created = $1
        WHERE id = $2`,
-      [ticketsResult.rows.length, webhookLogId]
+      [updateResult.rows.length, webhookLogId]
     );
     
     res.status(200).json({
       success: true,
-      message: `Marked ${ticketsResult.rows.length} ticket(s) as cancelled`,
-      tickets_updated: ticketsResult.rows.length
+      message: `Marked ${updateResult.rows.length} ticket(s) as cancelled`,
+      tickets_updated: updateResult.rows.length,
+      updated_tickets: updateResult.rows.map(t => ({ id: t.id, uuid: t.uuid, status: t.status }))
     });
     
   } catch (error) {
@@ -646,6 +658,51 @@ router.post('/cancel', validateShopifyHmac, async (req, res) => {
     }
     
     res.status(500).json({ error: 'Failed to process cancellation' });
+  }
+});
+
+// Debug endpoint to see recent webhook activity
+router.get('/debug/webhooks', async (req, res) => {
+  try {
+    const recentWebhooks = await db.query(`
+      SELECT 
+        id, 
+        shopify_order_id, 
+        webhook_type, 
+        processed, 
+        error_message, 
+        tickets_created,
+        created_at,
+        processed_at
+      FROM webhook_logs 
+      ORDER BY created_at DESC 
+      LIMIT 20
+    `);
+    
+    const ticketCounts = await db.query(`
+      SELECT 
+        status, 
+        COUNT(*) as count 
+      FROM tickets 
+      GROUP BY status
+    `);
+    
+    res.json({
+      recent_webhooks: recentWebhooks.rows,
+      ticket_status_counts: ticketCounts.rows,
+      debug_info: {
+        current_time: new Date().toISOString(),
+        webhook_endpoints: [
+          '/api/shopify/create-ticket',
+          '/api/shopify/refund', 
+          '/api/shopify/cancel',
+          '/api/shopify/chargeback'
+        ]
+      }
+    });
+  } catch (error) {
+    console.error('Error in debug endpoint:', error);
+    res.status(500).json({ error: 'Debug endpoint failed', message: error.message });
   }
 });
 

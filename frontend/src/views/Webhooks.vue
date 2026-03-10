@@ -101,9 +101,19 @@
                   </span>
                 </td>
                 <td>
-                  <button @click="viewDetails(webhook)" class="btn-view">
-                    View Details
-                  </button>
+                  <div class="action-buttons">
+                    <button @click="viewDetails(webhook)" class="btn-view">
+                      View Details
+                    </button>
+                    <button 
+                      v-if="canRetry(webhook)" 
+                      @click="retryWebhook(webhook)" 
+                      class="btn-retry"
+                      :disabled="webhook.retrying"
+                    >
+                      {{ webhook.retrying ? 'Retrying...' : '🔄 Retry' }}
+                    </button>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -117,7 +127,9 @@
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h2>Webhook Details</h2>
-          <button @click="closeModal" class="btn-close">×</button>
+          <div class="modal-header-actions">
+            <button @click="closeModal" class="btn-close">×</button>
+          </div>
         </div>
         <div class="modal-body">
           <div class="detail-row">
@@ -156,12 +168,69 @@
             <strong>Error Message:</strong>
             <span>{{ selectedWebhook.error_message }}</span>
           </div>
+          
+          <!-- Manual Retry Section -->
+          <div v-if="showRetrySection(selectedWebhook)" class="retry-section">
+            <strong>Manual Retry Options:</strong>
+            <div class="retry-controls">
+              <div class="webhook-type-selector">
+                <label for="webhook-type-select">Process as webhook type:</label>
+                <select 
+                  id="webhook-type-select" 
+                  v-model="selectedWebhookType" 
+                  class="webhook-type-dropdown"
+                >
+                  <option value="">{{ formatWebhookType(selectedWebhook.webhook_type) }} (Original)</option>
+                  <option 
+                    v-for="type in availableWebhookTypes.filter(t => t.value !== selectedWebhook.webhook_type)" 
+                    :key="type.value" 
+                    :value="type.value"
+                  >
+                    {{ type.label }}
+                  </option>
+                </select>
+              </div>
+              <button 
+                @click="retryWebhookFromModal" 
+                class="btn-retry-with-type"
+                :disabled="selectedWebhook.retrying"
+              >
+                {{ selectedWebhook.retrying ? 'Retrying...' : (
+                  selectedWebhookType ? 
+                  `🔄 Retry as ${availableWebhookTypes.find(t => t.value === selectedWebhookType)?.label}` : 
+                  '🔄 Retry as Original Type'
+                ) }}
+              </button>
+            </div>
+            <div class="retry-help">
+              <small>
+                💡 <strong>Tip:</strong> You can process this webhook data as a different type. 
+                For example, if an order webhook failed, you could retry it as a cancellation to invalidate the tickets.
+                <br><br>
+                <strong>Current behavior:</strong> {{ getWebhookDescription(selectedWebhook.webhook_type) }}
+                <span v-if="selectedWebhookType">
+                  <br><strong>Selected behavior:</strong> {{ getWebhookDescription(selectedWebhookType) }}
+                </span>
+                <br><br>
+                <span v-if="selectedWebhook.processed && !selectedWebhook.error_message" class="warning-text">
+                  ⚠️ <strong>Warning:</strong> This webhook was already processed successfully. 
+                  Retrying will re-run the action, which may create duplicate tickets or change existing ticket statuses.
+                </span>
+              </small>
+            </div>
+          </div>
+          
           <div v-if="webhookDetails" class="detail-section">
             <strong>Raw Webhook Data:</strong>
             <pre class="json-display">{{ formatJSON(webhookDetails.webhook_data) }}</pre>
           </div>
         </div>
       </div>
+    </div>
+    
+    <!-- Notification Toast -->
+    <div v-if="notification.show" class="notification-toast" :class="notification.type">
+      {{ notification.message }}
     </div>
   </div>
 </template>
@@ -192,6 +261,17 @@ export default {
     const filter = ref('all');
     const selectedWebhook = ref(null);
     const webhookDetails = ref(null);
+    const retryingWebhooks = ref(new Set());
+    const notification = ref({ show: false, message: '', type: 'success' });
+    const selectedWebhookType = ref('');
+    
+    // Available webhook types for manual selection
+    const availableWebhookTypes = ref([
+      { value: 'order_create', label: '📦 Order Created' },
+      { value: 'refund', label: '↩️ Refund' },
+      { value: 'cancel', label: '✖️ Cancelled' },
+      { value: 'chargeback', label: '⚠️ Chargeback' }
+    ]);
 
     const fetchStats = async () => {
       try {
@@ -226,6 +306,7 @@ export default {
 
     const viewDetails = async (webhook) => {
       selectedWebhook.value = webhook;
+      selectedWebhookType.value = ''; // Reset webhook type selection when opening modal
       
       // Fetch full webhook details including JSON data
       try {
@@ -236,9 +317,79 @@ export default {
       }
     };
 
+    const showNotification = (message, type = 'success') => {
+      notification.value = { show: true, message, type };
+      setTimeout(() => {
+        notification.value.show = false;
+      }, 4000);
+    };
+    
+    const retryWebhook = async (webhook, overrideType = null) => {
+      if (retryingWebhooks.value.has(webhook.id)) return;
+      
+      try {
+        // Mark as retrying
+        webhook.retrying = true;
+        retryingWebhooks.value.add(webhook.id);
+        
+        const requestBody = {};
+        if (overrideType) {
+          requestBody.webhook_type = overrideType;
+        }
+        
+        const response = await axios.post(`/api/webhooks/${webhook.id}/retry`, requestBody);
+        
+        console.log('Retry response:', response.data);
+        
+        // Show success message with type information
+        const typeInfo = response.data.type_overridden ? 
+          ` (processed as ${formatWebhookType(response.data.webhook_type)})` : '';
+        showNotification(`✅ ${response.data.message}${typeInfo}`, 'success');
+        
+        // Refresh the webhooks list and stats
+        await Promise.all([fetchWebhooks(), fetchStats()]);
+        
+      } catch (err) {
+        console.error('Error retrying webhook:', err);
+        const errorMsg = err.response?.data?.error || 'Failed to retry webhook';
+        showNotification(`❌ Retry failed: ${errorMsg}`, 'error');
+      } finally {
+        webhook.retrying = false;
+        retryingWebhooks.value.delete(webhook.id);
+      }
+    };
+    
+    const canRetry = (webhook) => {
+      // Can retry if webhook failed, is unprocessed, or we want to show manual override options
+      return !webhook.processed || webhook.error_message;
+    };
+    
+    const showRetrySection = (webhook) => {
+      // Always show the retry section in the modal for manual override capability
+      return true;
+    };
+    
+    const retryWebhookFromModal = async () => {
+      if (selectedWebhook.value) {
+        await retryWebhook(selectedWebhook.value, selectedWebhookType.value || null);
+        // Refresh the modal details after retry
+        if (selectedWebhook.value.processed || selectedWebhookType.value) {
+          try {
+            const response = await axios.get(`/api/webhooks/${selectedWebhook.value.id}`);
+            webhookDetails.value = response.data;
+            // Update the selected webhook data
+            Object.assign(selectedWebhook.value, response.data);
+          } catch (err) {
+            console.error('Error refreshing webhook details:', err);
+          }
+        }
+      }
+    };
+    
     const closeModal = () => {
       selectedWebhook.value = null;
       webhookDetails.value = null;
+      selectedWebhookType.value = ''; // Reset webhook type selection
     };
 
     const getCustomerName = (webhook) => {
@@ -295,6 +446,16 @@ export default {
       return types[type] || '📦 Order';
     };
 
+    const getWebhookDescription = (type) => {
+      const descriptions = {
+        'order_create': 'Creates new tickets from order data',
+        'refund': 'Marks associated tickets as refunded (invalid)',
+        'cancel': 'Marks associated tickets as cancelled (invalid)', 
+        'chargeback': 'Marks associated tickets as chargeback (invalid)'
+      };
+      return descriptions[type] || 'Unknown action';
+    };
+
     const formatJSON = (data) => {
       if (typeof data === 'string') {
         try {
@@ -338,15 +499,24 @@ export default {
       selectedWebhook,
       webhookDetails,
       isChangePasswordOpen,
+      notification,
+      selectedWebhookType,
+      availableWebhookTypes,
+      showNotification,
       fetchWebhooks,
       viewDetails,
       closeModal,
+      retryWebhook,
+      retryWebhookFromModal,
+      canRetry,
+      showRetrySection,
       getCustomerName,
       formatDate,
       formatDateFull,
       getStatusClass,
       getStatusText,
       formatWebhookType,
+      getWebhookDescription,
       formatJSON,
       showChangePassword,
       handleLogout,
@@ -580,10 +750,65 @@ export default {
   cursor: pointer;
   font-size: 0.875rem;
   transition: background 0.2s;
+  margin-right: 0.5rem;
 }
 
 .btn-view:hover {
   background: #5568d3;
+}
+
+.btn-retry {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: background 0.2s;
+}
+
+.btn-retry:hover:not(:disabled) {
+  background: #218838;
+}
+
+.btn-retry:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* Notification Toast */
+.notification-toast {
+  position: fixed;
+  top: 2rem;
+  right: 2rem;
+  padding: 1rem 1.5rem;
+  border-radius: 8px;
+  font-weight: 600;
+  z-index: 2000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+  max-width: 400px;
+  word-wrap: break-word;
+}
+
+.notification-toast.success {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.notification-toast.error {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
 }
 
 .loading,
@@ -635,6 +860,11 @@ export default {
   margin: 0;
   font-size: 1.5rem;
   color: #333;
+}
+
+.modal-header-actions {
+  display: flex;
+  align-items: center;
 }
 
 .btn-close {
@@ -696,6 +926,98 @@ export default {
   color: #555;
 }
 
+/* Retry Section Styles */
+.retry-section {
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+.retry-section strong {
+  display: block;
+  margin-bottom: 1rem;
+  color: #333;
+  font-size: 1rem;
+}
+
+.retry-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.webhook-type-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.webhook-type-selector label {
+  font-weight: 600;
+  color: #555;
+  font-size: 0.875rem;
+}
+
+.webhook-type-dropdown {
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: white;
+  font-size: 0.875rem;
+  color: #333;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.webhook-type-dropdown:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+}
+
+.btn-retry-with-type {
+  background: #17a2b8;
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: background 0.2s;
+  align-self: flex-start;
+}
+
+.btn-retry-with-type:hover:not(:disabled) {
+  background: #138496;
+}
+
+.btn-retry-with-type:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.retry-help {
+  padding: 1rem;
+  background: #e3f2fd;
+  border-radius: 6px;
+  border-left: 4px solid #2196f3;
+}
+
+.retry-help small {
+  color: #1976d2;
+  line-height: 1.4;
+}
+
+.retry-help .warning-text {
+  color: #d84315 !important;
+  font-weight: 600;
+}
+
 .json-display {
   background: #f5f5f5;
   padding: 1rem;
@@ -729,11 +1051,59 @@ export default {
 
   .webhooks-table {
     font-size: 0.875rem;
+    overflow-x: auto;
+    display: block;
+    white-space: nowrap;
   }
 
   .webhooks-table th,
   .webhooks-table td {
     padding: 0.5rem;
+    min-width: 120px;
+  }
+  
+  .action-buttons {
+    flex-direction: column;
+    min-width: 140px;
+  }
+  
+  .btn-view, .btn-retry {
+    font-size: 0.75rem;
+    padding: 0.4rem 0.8rem;
+    margin: 0;
+    width: 100%;
+  }
+  
+  .modal-header-actions {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .btn-retry-modal {
+    font-size: 0.75rem;
+    padding: 0.5rem 1rem;
+  }
+  
+  .notification-toast {
+    top: 1rem;
+    right: 1rem;
+    left: 1rem;
+    max-width: none;
+    font-size: 0.875rem;
+  }
+  
+  .retry-controls {
+    gap: 0.75rem;
+  }
+  
+  .btn-retry-with-type {
+    font-size: 0.75rem;
+    padding: 0.6rem 1rem;
+    align-self: stretch;
+  }
+  
+  .retry-help {
+    padding: 0.75rem;
   }
 }
 </style>

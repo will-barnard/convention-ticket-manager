@@ -5,21 +5,10 @@ const checkLockdown = require('../middleware/lockdown');
 
 const router = express.Router();
 
-// Helper function to get current date in a specific timezone (YYYY-MM-DD format)
-function getDateInTimezone(timezone) {
+// Helper function to get server's current date in UTC YYYY-MM-DD format
+function getServerDateUTC() {
   const now = new Date();
-  // Convert to the target timezone
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  });
-  const parts = formatter.formatToParts(now);
-  const year = parts.find(p => p.type === 'year').value;
-  const month = parts.find(p => p.type === 'month').value;
-  const day = parts.find(p => p.type === 'day').value;
-  return `${year}-${month}-${day}`;
+  return now.toISOString().split('T')[0];
 }
 
 // Helper function to format a date to UTC YYYY-MM-DD
@@ -42,17 +31,16 @@ function getAllowedDays(subtype) {
   return dayMapping[subtype] || [];
 }
 
-// Helper function to check if today (in convention timezone) matches any of the allowed convention dates
+// Helper function to check if today (server time UTC) matches any of the allowed convention dates
 async function checkDateValidity(allowedDays) {
-  const settingsResult = await db.query('SELECT friday_date, saturday_date, sunday_date, timezone FROM settings LIMIT 1');
+  const settingsResult = await db.query('SELECT friday_date, saturday_date, sunday_date FROM settings LIMIT 1');
   
   if (settingsResult.rows.length === 0) {
     return { valid: false, message: 'Convention dates not configured in settings' };
   }
   
   const settings = settingsResult.rows[0];
-  const timezone = settings.timezone || 'America/Chicago'; // Default to Chicago if not set
-  const todayInConventionTimezone = getDateInTimezone(timezone); // Current date in convention's timezone
+  const todayUTC = getServerDateUTC(); // Server time in UTC
   
   const dateMapping = {
     'friday': settings.friday_date,
@@ -64,7 +52,7 @@ async function checkDateValidity(allowedDays) {
     const conventionDate = dateMapping[day];
     if (conventionDate) {
       const dateStrUTC = formatDateUTC(conventionDate);
-      if (dateStrUTC === todayInConventionTimezone) {
+      if (dateStrUTC === todayUTC) {
         return { valid: true, day: day };
       }
     }
@@ -146,13 +134,11 @@ router.get('/:uuid', authMiddleware, checkLockdown, async (req, res) => {
         });
       }
       
-      // Record the scan with current date in convention timezone and scanner user
-      const settingsResult = await db.query('SELECT timezone FROM settings LIMIT 1');
-      const timezone = settingsResult.rows[0]?.timezone || 'America/Chicago';
-      const todayInConventionTimezone = getDateInTimezone(timezone);
+      // Record the scan with server time UTC and scanner user
+      const todayUTC = getServerDateUTC();
       await db.query(
         'INSERT INTO ticket_scans (ticket_id, scan_date, scanned_by_user_id) VALUES ($1, $2, $3)',
-        [ticket.id, todayInConventionTimezone, req.user.id]
+        [ticket.id, todayUTC, req.user.id]
       );
       
       return res.json({
