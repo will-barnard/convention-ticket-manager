@@ -170,7 +170,7 @@
                         Delete
                       </button>
                       <button 
-                        v-else-if="(authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin') && group.tickets.length === 1 && group.tickets.some(t => !t.email_sent)"
+                        v-else-if="(authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin') && group.tickets.length === 1 && group.tickets.some(t => !t.email_sent) && group.tickets.every(t => !t.status || t.status === 'valid')"
                         @click.stop="sendAllTicketsEmail(group)"
                         class="btn-send-all"
                         title="Send ticket email"
@@ -178,7 +178,7 @@
                         Send Email
                       </button>
                       <button 
-                        v-else-if="(authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin') && group.tickets.length > 1 && group.tickets.some(t => !t.email_sent)"
+                        v-else-if="(authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin') && group.tickets.length > 1 && group.tickets.some(t => !t.email_sent) && group.tickets.every(t => !t.status || t.status === 'valid')"
                         @click.stop="sendAllTicketsEmail(group)"
                         class="btn-send-all"
                         title="Send all tickets in one email"
@@ -242,7 +242,7 @@
                           {{ ticket.email_sent ? 'Sent' : 'Not Sent' }}
                         </span>
                         <button 
-                          v-if="(authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin') && ticket.email_sent && ticket.email" 
+                          v-if="(authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin') && ticket.email_sent && ticket.email && (!ticket.status || ticket.status === 'valid')" 
                           @click="sendTicketEmail(ticket.id)" 
                           class="btn-resend-email"
                           title="Resend ticket email"
@@ -282,7 +282,7 @@
                           Edit
                         </button>
                         <button 
-                          v-if="(authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin') && ticket.email && (!ticket.email_sent || emailJustChanged.has(ticket.id))" 
+                          v-if="(authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin') && ticket.email && (!ticket.email_sent || emailJustChanged.has(ticket.id)) && (!ticket.status || ticket.status === 'valid')" 
                           @click="sendTicketEmail(ticket.id)" 
                           :class="['btn-send-email', { 'email-changed': emailJustChanged.has(ticket.id) }]"
                           :title="emailJustChanged.has(ticket.id) ? 'Email changed - Send ticket' : 'Send Ticket Email'"
@@ -469,7 +469,7 @@
 
           <div class="modal-actions">
             <button 
-              v-if="(authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin') && !viewingExhibitorOrder.tickets[0].email_sent"
+              v-if="(authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin') && !viewingExhibitorOrder.tickets[0].email_sent && (!viewingExhibitorOrder.tickets[0].status || viewingExhibitorOrder.tickets[0].status === 'valid')"
               @click="sendTicketEmail(viewingExhibitorOrder.tickets[0].id)"
               class="btn-primary"
             >
