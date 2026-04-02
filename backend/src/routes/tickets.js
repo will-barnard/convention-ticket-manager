@@ -753,11 +753,7 @@ router.post('/batch-send-emails', authMiddleware, async (req, res) => {
     
     query += ' ORDER BY created_at ASC';
     
-    // Limit to the lesser of: batch limit (85) or remaining daily quota
-    const effectiveLimit = Math.min(batchLimit, remaining);
-    query += ` LIMIT ${effectiveLimit}`;
-    
-    // Get all tickets that haven't had emails sent (filtered by type if specified)
+    // Get all unsent tickets, then group by email so each purchaser gets one consolidated email
     const ticketsResult = await db.query(query, params);
 
     if (ticketsResult.rows.length === 0) {
@@ -768,84 +764,106 @@ router.post('/batch-send-emails', authMiddleware, async (req, res) => {
       });
     }
 
-    const tickets = ticketsResult.rows;
+    // Group tickets by email address so all tickets for one purchaser go in a single email
+    const emailGroups = {};
+    for (const ticket of ticketsResult.rows) {
+      const emailKey = ticket.email.toLowerCase();
+      if (!emailGroups[emailKey]) {
+        emailGroups[emailKey] = [];
+      }
+      emailGroups[emailKey].push(ticket);
+    }
+
+    // Limit to the lesser of: batch limit (85) or remaining daily quota (one email per group)
+    const effectiveLimit = Math.min(batchLimit, remaining);
+    const groupsToProcess = Object.values(emailGroups).slice(0, effectiveLimit);
+
     let sentCount = 0;
     let failedCount = 0;
 
-    // Send emails with 6-second delay between each (10 per minute)
-    for (const ticket of tickets) {
+    // Send one consolidated email per purchaser, with a 6-second delay between sends
+    for (let groupIndex = 0; groupIndex < groupsToProcess.length; groupIndex++) {
+      const group = groupsToProcess[groupIndex];
+      const recipientEmail = group[0].email;
+      const recipientName = group[0].name;
+
       try {
-        // Get supplies if exhibitor ticket
-        let supplies = null;
-        if (ticket.ticket_type === 'exhibitor') {
-          const suppliesResult = await db.query(
-            'SELECT supply_name, quantity FROM ticket_supplies WHERE ticket_id = $1',
-            [ticket.id]
-          );
-          supplies = suppliesResult.rows.map(s => ({
-            name: s.supply_name,
-            quantity: s.quantity
-          }));
+        // Build the tickets array for the consolidated email
+        const ticketsForEmail = [];
+        for (const ticket of group) {
+          let supplies = null;
+          if (ticket.ticket_type === 'exhibitor') {
+            const suppliesResult = await db.query(
+              'SELECT supply_name, quantity FROM ticket_supplies WHERE ticket_id = $1',
+              [ticket.id]
+            );
+            supplies = suppliesResult.rows.map(s => ({
+              name: s.supply_name,
+              quantity: s.quantity
+            }));
+          }
+
+          const verifyUrl = `${process.env.FRONTEND_URL}/verify/${ticket.uuid}`;
+          const qrCodeDataUrl = await QRCode.toDataURL(verifyUrl);
+
+          ticketsForEmail.push({
+            ...ticket,
+            supplies,
+            verifyUrl,
+            qrCodeDataUrl,
+          });
         }
 
-        // Generate verification URL and QR code
-        const verifyUrl = `${process.env.FRONTEND_URL}/verify/${ticket.uuid}`;
-        const qrCodeDataUrl = await QRCode.toDataURL(verifyUrl);
-
-        // Send email
+        // Send one email with all tickets consolidated
         await emailService.sendTicketEmail({
-          to: ticket.email,
-          name: ticket.name,
-          ticketType: ticket.ticket_type,
-          ticketSubtype: ticket.ticket_subtype,
-          teacherName: ticket.teacher_name,
-          supplies: supplies,
-          qrCodeDataUrl: qrCodeDataUrl,
-          verifyUrl: verifyUrl,
+          to: recipientEmail,
+          name: recipientName,
+          tickets: ticketsForEmail,
         });
 
-        // Mark as sent
+        // Mark all tickets in this group as sent
+        const ticketIds = group.map(t => t.id);
         await db.query(
-          'UPDATE tickets SET email_sent = true, email_sent_at = NOW() WHERE id = $1',
-          [ticket.id]
+          `UPDATE tickets SET email_sent = true, email_sent_at = NOW() WHERE id = ANY($1)`,
+          [ticketIds]
         );
-        
-        // Log the email send
+
+        // Log one entry per email sent (one per group) for accurate quota tracking
         await db.query(
           'INSERT INTO email_send_log (recipient_email, ticket_id, send_type, success) VALUES ($1, $2, $3, $4)',
-          [ticket.email, ticket.id, 'batch_send', true]
+          [recipientEmail, group[0].id, 'batch_send', true]
         );
 
         sentCount++;
 
         // Wait 6 seconds before sending next email (10 per minute)
-        if (tickets.indexOf(ticket) < tickets.length - 1) {
+        if (groupIndex < groupsToProcess.length - 1) {
           await new Promise(resolve => setTimeout(resolve, 6000));
         }
       } catch (emailError) {
-        console.error(`Failed to send email for ticket ${ticket.id}:`, emailError);
+        console.error(`Failed to send batch email to ${recipientEmail}:`, emailError);
         failedCount++;
         
-        // Log the failed email attempt
+        // Log the failed attempt (one entry per email attempted)
         try {
           await db.query(
             'INSERT INTO email_send_log (recipient_email, ticket_id, send_type, success) VALUES ($1, $2, $3, $4)',
-            [ticket.email, ticket.id, 'batch_send', false]
+            [recipientEmail, group[0].id, 'batch_send', false]
           );
         } catch (logError) {
           console.error('Failed to log email failure:', logError);
         }
-        
+
         // Send admin notification about the bounce/failure
         try {
           await emailService.sendAdminNotification({
             subject: 'Batch Email Delivery Failure',
             message: 'A ticket email failed to send during batch processing. The recipient may have an invalid email address or the email server rejected the message.',
             ticketDetails: {
-              recipientEmail: ticket.email,
-              recipientName: ticket.name,
-              ticketType: `${ticket.ticket_type}${ticket.ticket_subtype ? ` (${ticket.ticket_subtype})` : ''}`,
-              ticketId: ticket.id,
+              recipientEmail,
+              recipientName,
+              ticketType: `${group.length} ticket(s)`,
+              ticketId: group.map(t => t.id).join(', '),
               error: emailError.message || 'Unknown error'
             }
           });
@@ -864,10 +882,10 @@ router.post('/batch-send-emails', authMiddleware, async (req, res) => {
     const updatedRemaining = Math.max(0, dailyLimit - updatedSentToday);
 
     res.json({
-      message: `Batch send complete. Sent: ${sentCount}, Failed: ${failedCount}`,
+      message: `Batch send complete. Sent: ${sentCount} email(s), Failed: ${failedCount}`,
       sent: sentCount,
       failed: failedCount,
-      total: tickets.length,
+      total: groupsToProcess.length,
       dailyQuota: {
         sentToday: updatedSentToday,
         dailyLimit,
