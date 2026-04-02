@@ -162,6 +162,15 @@
                         Show Details
                       </button>
                       <button 
+                        v-if="filterType === 'exhibitor' && (authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin') && group.tickets[0].email_sent && group.customerEmail && (!group.tickets[0].status || group.tickets[0].status === 'valid')"
+                        @click.stop="sendTicketEmail(group.tickets[0].id)"
+                        class="btn-resend-email"
+                        title="Resend exhibitor ticket email"
+                      >
+                        <font-awesome-icon icon="redo" />
+                        Resend
+                      </button>
+                      <button 
                         v-if="filterType === 'exhibitor' && (authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin')"
                         @click.stop="deleteTicket(group.tickets[0].id)"
                         class="btn-delete"
@@ -474,6 +483,14 @@
               class="btn-primary"
             >
               Send Ticket Email
+            </button>
+            <button 
+              v-if="(authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin') && viewingExhibitorOrder.tickets[0].email_sent && viewingExhibitorOrder.customerEmail && (!viewingExhibitorOrder.tickets[0].status || viewingExhibitorOrder.tickets[0].status === 'valid')"
+              @click="sendTicketEmail(viewingExhibitorOrder.tickets[0].id)"
+              class="btn-secondary"
+            >
+              <font-awesome-icon icon="redo" />
+              Resend Email
             </button>
             <button @click="closeExhibitorModal" class="btn-secondary">
               Close
