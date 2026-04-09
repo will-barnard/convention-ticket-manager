@@ -1,6 +1,8 @@
 const express = require('express');
 const { Resend } = require('resend');
 const nodemailer = require('nodemailer');
+const path = require('path');
+const fs = require('fs');
 const db = require('../config/database');
 const authMiddleware = require('../middleware/auth');
 const superAdminMiddleware = require('../middleware/superadmin');
@@ -35,8 +37,62 @@ function getAvailableProviders() {
   return providers;
 }
 
-async function sendEmail({ provider, to, subject, html }) {
-  if (provider === 'gmail') {
+async function buildEmailHtml({ body, recipientName, includeLogo, includeFooter }) {
+  // Convert plain-text line breaks to HTML paragraphs if body doesn't already contain block tags
+  const hasBlockTags = /<(p|div|h[1-6]|ul|ol|li|br|blockquote)\b/i.test(body);
+  let formattedBody;
+  if (hasBlockTags) {
+    formattedBody = body;
+  } else {
+    // Wrap each non-empty line in a <p>; blank lines become spacing
+    formattedBody = body
+      .split('\n')
+      .map(line => line.trim() === '' ? '<p style="margin:0;height:1em;"></p>' : `<p style="margin:0 0 0.8em 0;">${line}</p>`)
+      .join('\n');
+  }
+
+  // Logo banner
+  let logoBanner = '';
+  if (includeLogo) {
+    try {
+      const settingsResult = await db.query('SELECT convention_name, logo_url FROM settings LIMIT 1');
+      if (settingsResult.rows.length > 0) {
+        const { convention_name, logo_url } = settingsResult.rows[0];
+        if (logo_url) {
+          const logoPath = path.join(__dirname, '../..', logo_url);
+          if (fs.existsSync(logoPath)) {
+            const ext = path.extname(logo_url).slice(1).toLowerCase();
+            const mime = ext === 'svg' ? 'image/svg+xml' : `image/${ext}`;
+            const b64 = fs.readFileSync(logoPath).toString('base64');
+            logoBanner = `
+              <div style="text-align:center;padding:24px 0 16px;">
+                <img src="data:${mime};base64,${b64}" alt="${convention_name}" style="max-width:200px;max-height:80px;object-fit:contain;" />
+              </div>`;
+          }
+        }
+      }
+    } catch (_) { /* logo is optional — skip silently */ }
+  }
+
+  // Footer
+  const footer = includeFooter && recipientName
+    ? `<div style="margin-top:30px;padding-top:16px;border-top:1px solid #e5e5e5;color:#999;font-size:12px;">
+         <p style="margin:0;">Ticket holder: ${recipientName}</p>
+       </div>`
+    : '';
+
+  return `
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#222;">
+      ${logoBanner}
+      <div style="padding:8px 0;">
+        ${formattedBody}
+      </div>
+      ${footer}
+    </div>
+  `;
+}
+
+async function sendEmail({ provider, to, subject, html }) {  if (provider === 'gmail') {
     const transporter = getGmailTransporter();
     if (!transporter) throw new Error('Gmail is not configured');
     await transporter.sendMail({
@@ -66,7 +122,7 @@ router.get('/providers', authMiddleware, superAdminMiddleware, (req, res) => {
 // Send test email
 router.post('/test', authMiddleware, superAdminMiddleware, async (req, res) => {
   try {
-    const { subject, body, testEmail, provider = 'resend' } = req.body;
+    const { subject, body, testEmail, provider = 'resend', includeLogo = false, includeFooter = true } = req.body;
 
     if (!subject || !body || !testEmail) {
       return res.status(400).json({ error: 'Subject, body, and test email address are required' });
@@ -80,19 +136,25 @@ router.post('/test', authMiddleware, superAdminMiddleware, async (req, res) => {
       return res.status(400).json({ error: `Provider "${provider}" is not configured` });
     }
 
+    const bodyHtml = await buildEmailHtml({
+      body,
+      recipientName: req.user.name || req.user.email,
+      includeLogo,
+      includeFooter,
+    });
+
     await sendEmail({
       provider,
       to: testEmail,
       subject: `[TEST] ${subject}`,
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background: #f44336; color: white; padding: 15px; text-align: center; font-weight: bold; margin-bottom: 20px;">
-            🧪 TEST EMAIL - This is a preview
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+          <div style="background:#f44336;color:white;padding:12px;text-align:center;font-weight:bold;margin-bottom:20px;border-radius:4px;">
+            🧪 TEST EMAIL — This is a preview
           </div>
-          ${body}
-          <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #eee; color: #666; font-size: 12px;">
-            <p>This is a test email sent from the Bulk Email tool.</p>
-            <p>Sent by: ${req.user.name || req.user.email}</p>
+          ${bodyHtml}
+          <div style="margin-top:20px;padding-top:12px;border-top:1px solid #eee;color:#999;font-size:12px;">
+            <p style="margin:0;">Sent by: ${req.user.name || req.user.email}</p>
           </div>
         </div>
       `,
@@ -114,7 +176,7 @@ router.post('/test', authMiddleware, superAdminMiddleware, async (req, res) => {
 // Accepts either `ticketTypes` (send to all valid holders) or `recipients` (explicit email list)
 router.post('/send', authMiddleware, superAdminMiddleware, async (req, res) => {
   try {
-    const { subject, body, ticketTypes, recipients: explicitRecipients, provider = 'resend' } = req.body;
+    const { subject, body, ticketTypes, recipients: explicitRecipients, provider = 'resend', includeLogo = false, includeFooter = true } = req.body;
 
     if (!subject || !body) {
       return res.status(400).json({ error: 'Subject and body are required' });
@@ -213,18 +275,18 @@ router.post('/send', authMiddleware, superAdminMiddleware, async (req, res) => {
 
     for (const recipient of recipients) {
       try {
+        const html = await buildEmailHtml({
+          body,
+          recipientName: recipient.name,
+          includeLogo,
+          includeFooter,
+        });
+
         await sendEmail({
           provider,
           to: recipient.email,
           subject,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              ${body}
-              <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #eee; color: #666; font-size: 12px;">
-                <p>Ticket holder: ${recipient.name}</p>
-              </div>
-            </div>
-          `,
+          html,
         });
 
         await db.query(

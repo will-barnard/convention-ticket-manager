@@ -144,16 +144,27 @@
         </div>
 
         <div class="form-group">
-          <label>Message Body * (HTML supported)</label>
+          <label>Message Body *</label>
           <textarea
             v-model="body"
             rows="12"
-            placeholder="Enter your message here. You can use HTML for formatting."
+            placeholder="Write your message here. Plain text is fine — line breaks are preserved. HTML tags are also supported."
             class="form-textarea"
           ></textarea>
           <p class="hint">
-            Tip: Use HTML tags like &lt;strong&gt;, &lt;em&gt;, &lt;p&gt;, &lt;br&gt;, &lt;ul&gt;, &lt;li&gt; for formatting
+            Plain text with line breaks works naturally. You can also use HTML: &lt;strong&gt;, &lt;em&gt;, &lt;a href=""&gt;, &lt;ul&gt;/&lt;li&gt;, etc.
           </p>
+        </div>
+
+        <div class="email-options">
+          <label class="checkbox-label">
+            <input type="checkbox" v-model="includeLogo" />
+            <span class="checkbox-text">Include convention logo as top banner</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" v-model="includeFooter" />
+            <span class="checkbox-text">Include "Ticket holder: [name]" footer</span>
+          </label>
         </div>
       </div>
 
@@ -266,6 +277,8 @@ export default {
     const showConfirmModal = ref(false);
     const availableProviders = ref([]);
     const selectedProvider = ref('resend');
+    const includeLogo = ref(false);
+    const includeFooter = ref(true);
 
     // Unique ticket types present in the current preview list
     const presentTypes = computed(() => {
@@ -357,6 +370,8 @@ export default {
           body: body.value,
           testEmail: testEmail.value,
           provider: selectedProvider.value,
+          includeLogo: includeLogo.value,
+          includeFooter: includeFooter.value,
         });
 
         testResult.value = {
@@ -389,6 +404,8 @@ export default {
           body: body.value,
           recipients: selectedRecipients.value,
           provider: selectedProvider.value,
+          includeLogo: includeLogo.value,
+          includeFooter: includeFooter.value,
         });
 
         sendResult.value = {
@@ -451,6 +468,8 @@ export default {
       showConfirmModal,
       availableProviders,
       selectedProvider,
+      includeLogo,
+      includeFooter,
       canSendTest,
       canSendBulk,
       handleSelectAll,
@@ -772,6 +791,17 @@ export default {
   font-size: 0.85rem;
   color: #999;
   font-style: italic;
+}
+
+.email-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #dee2e6;
 }
 
 /* Buttons */
