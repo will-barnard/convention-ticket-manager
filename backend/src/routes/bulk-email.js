@@ -1,5 +1,6 @@
 const express = require('express');
 const { Resend } = require('resend');
+const nodemailer = require('nodemailer');
 const db = require('../config/database');
 const authMiddleware = require('../middleware/auth');
 const superAdminMiddleware = require('../middleware/superadmin');
@@ -10,29 +11,77 @@ const router = express.Router();
 const lastSendTimes = new Map();
 const RATE_LIMIT_MS = 60000; // 1 minute between bulk sends
 
-// Create Resend client
-const isEmailConfigured = process.env.RESEND_API_KEY;
-let resend = null;
-if (isEmailConfigured) {
-  resend = new Resend(process.env.RESEND_API_KEY);
+// Provider helpers
+function getResendClient() {
+  if (!process.env.RESEND_API_KEY) return null;
+  return new Resend(process.env.RESEND_API_KEY);
 }
+
+function getGmailTransporter() {
+  if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) return null;
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.GMAIL_USER,
+      pass: process.env.GMAIL_APP_PASSWORD,
+    },
+  });
+}
+
+function getAvailableProviders() {
+  const providers = [];
+  if (process.env.RESEND_API_KEY) providers.push('resend');
+  if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) providers.push('gmail');
+  return providers;
+}
+
+async function sendEmail({ provider, to, subject, html }) {
+  if (provider === 'gmail') {
+    const transporter = getGmailTransporter();
+    if (!transporter) throw new Error('Gmail is not configured');
+    await transporter.sendMail({
+      from: process.env.EMAIL_FROM || process.env.GMAIL_USER,
+      to,
+      subject,
+      html,
+    });
+  } else {
+    // Default: resend
+    const resend = getResendClient();
+    if (!resend) throw new Error('Resend is not configured');
+    await resend.emails.send({
+      from: process.env.EMAIL_FROM,
+      to,
+      subject,
+      html,
+    });
+  }
+}
+
+// Return which providers are configured
+router.get('/providers', authMiddleware, superAdminMiddleware, (req, res) => {
+  res.json({ providers: getAvailableProviders() });
+});
 
 // Send test email
 router.post('/test', authMiddleware, superAdminMiddleware, async (req, res) => {
   try {
-    const { subject, body, testEmail } = req.body;
+    const { subject, body, testEmail, provider = 'resend' } = req.body;
 
     if (!subject || !body || !testEmail) {
       return res.status(400).json({ error: 'Subject, body, and test email address are required' });
     }
 
-    if (!isEmailConfigured || !transporter) {
-      return res.status(503).json({ error: 'Email service is not configured' });
+    const available = getAvailableProviders();
+    if (available.length === 0) {
+      return res.status(503).json({ error: 'No email provider is configured' });
+    }
+    if (!available.includes(provider)) {
+      return res.status(400).json({ error: `Provider "${provider}" is not configured` });
     }
 
-    // Send test email
-    await resend.emails.send({
-      from: process.env.EMAIL_FROM,
+    await sendEmail({
+      provider,
       to: testEmail,
       subject: `[TEST] ${subject}`,
       html: `
@@ -46,14 +95,14 @@ router.post('/test', authMiddleware, superAdminMiddleware, async (req, res) => {
             <p>Sent by: ${req.user.name || req.user.email}</p>
           </div>
         </div>
-      `
+      `,
     });
 
-    console.log(`📧 Test email sent to ${testEmail} by ${req.user.email}`);
+    console.log(`📧 Test email sent to ${testEmail} via ${provider} by ${req.user.email}`);
 
     res.json({
       success: true,
-      message: `Test email sent to ${testEmail}`
+      message: `Test email sent to ${testEmail}`,
     });
   } catch (error) {
     console.error('Error sending test email:', error);
@@ -62,20 +111,21 @@ router.post('/test', authMiddleware, superAdminMiddleware, async (req, res) => {
 });
 
 // Send bulk email
+// Accepts either `ticketTypes` (send to all valid holders) or `recipients` (explicit email list)
 router.post('/send', authMiddleware, superAdminMiddleware, async (req, res) => {
   try {
-    const { subject, body, ticketTypes } = req.body;
+    const { subject, body, ticketTypes, recipients: explicitRecipients, provider = 'resend' } = req.body;
 
     if (!subject || !body) {
       return res.status(400).json({ error: 'Subject and body are required' });
     }
 
-    if (!ticketTypes || !Array.isArray(ticketTypes) || ticketTypes.length === 0) {
-      return res.status(400).json({ error: 'At least one ticket type must be selected' });
+    const available = getAvailableProviders();
+    if (available.length === 0) {
+      return res.status(503).json({ error: 'No email provider is configured' });
     }
-
-    if (!isEmailConfigured || !transporter) {
-      return res.status(503).json({ error: 'Email service is not configured' });
+    if (!available.includes(provider)) {
+      return res.status(400).json({ error: `Provider "${provider}" is not configured` });
     }
 
     // Check rate limit
@@ -85,52 +135,71 @@ router.post('/send', authMiddleware, superAdminMiddleware, async (req, res) => {
 
     if (lastSendTime && (now - lastSendTime) < RATE_LIMIT_MS) {
       const remainingSeconds = Math.ceil((RATE_LIMIT_MS - (now - lastSendTime)) / 1000);
-      return res.status(429).json({ 
-        error: `Please wait ${remainingSeconds} seconds before sending another bulk email` 
+      return res.status(429).json({
+        error: `Please wait ${remainingSeconds} seconds before sending another bulk email`,
       });
     }
-    
-    // Get tickets based on selected types - only include valid tickets
-    const placeholders = ticketTypes.map((_, i) => `$${i + 1}`).join(', ');
-    const query = `
-      SELECT DISTINCT email, name, ticket_type
-      FROM tickets
-      WHERE ticket_type IN (${placeholders})
-      AND email IS NOT NULL
-      AND email != ''
-      AND (status IS NULL OR status = 'valid')
-      ORDER BY email
-    `;
 
-    const result = await db.query(query, ticketTypes);
-    const recipients = result.rows;
+    let recipients;
+
+    if (explicitRecipients && Array.isArray(explicitRecipients) && explicitRecipients.length > 0) {
+      // Explicit recipient list sent from the frontend (user-selected individuals)
+      const placeholders = explicitRecipients.map((_, i) => `$${i + 1}`).join(', ');
+      const result = await db.query(
+        `SELECT DISTINCT email, name, ticket_type
+         FROM tickets
+         WHERE email IN (${placeholders})
+           AND email IS NOT NULL
+           AND email != ''
+           AND (status IS NULL OR status = 'valid')
+         ORDER BY email`,
+        explicitRecipients,
+      );
+      recipients = result.rows;
+    } else if (ticketTypes && Array.isArray(ticketTypes) && ticketTypes.length > 0) {
+      // Fallback: ticket-type based selection
+      const placeholders = ticketTypes.map((_, i) => `$${i + 1}`).join(', ');
+      const result = await db.query(
+        `SELECT DISTINCT email, name, ticket_type
+         FROM tickets
+         WHERE ticket_type IN (${placeholders})
+           AND email IS NOT NULL
+           AND email != ''
+           AND (status IS NULL OR status = 'valid')
+         ORDER BY email`,
+        ticketTypes,
+      );
+      recipients = result.rows;
+    } else {
+      return res.status(400).json({ error: 'Either recipients or ticketTypes must be provided' });
+    }
 
     if (recipients.length === 0) {
-      return res.status(400).json({ error: 'No valid recipients found for selected ticket types' });
+      return res.status(400).json({ error: 'No valid recipients found' });
     }
-    
-    // Check daily email limit after getting recipients count
+
+    // Check daily email limit
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
-    
+
     const quotaResult = await db.query(
       'SELECT COUNT(*) as sent_today FROM email_send_log WHERE sent_at >= $1 AND success = true',
-      [todayStart]
+      [todayStart],
     );
-    
+
     const sentToday = parseInt(quotaResult.rows[0].sent_today);
     const dailyLimit = 100;
     const remaining = Math.max(0, dailyLimit - sentToday);
-    
+
     if (remaining === 0) {
-      return res.status(429).json({ 
-        error: 'Daily email limit of 100 emails reached. Please try again tomorrow.'
+      return res.status(429).json({
+        error: 'Daily email limit of 100 emails reached. Please try again tomorrow.',
       });
     }
-    
+
     if (recipients.length > remaining) {
-      return res.status(429).json({ 
-        error: `Cannot send ${recipients.length} emails. Only ${remaining} emails remaining in today's quota of 100.`
+      return res.status(429).json({
+        error: `Cannot send ${recipients.length} emails. Only ${remaining} emails remaining in today's quota of 100.`,
       });
     }
 
@@ -144,27 +213,25 @@ router.post('/send', authMiddleware, superAdminMiddleware, async (req, res) => {
 
     for (const recipient of recipients) {
       try {
-        await resend.emails.send({
-          from: process.env.EMAIL_FROM,
+        await sendEmail({
+          provider,
           to: recipient.email,
-          subject: subject,
+          subject,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               ${body}
               <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #eee; color: #666; font-size: 12px;">
-                <p>You are receiving this email because you have a ticket for the Chicago Drum Show.</p>
                 <p>Ticket holder: ${recipient.name}</p>
               </div>
             </div>
-          `
+          `,
         });
-        
-        // Log successful send
+
         await db.query(
           'INSERT INTO email_send_log (recipient_email, send_type, success) VALUES ($1, $2, $3)',
-          [recipient.email, 'bulk_email', true]
+          [recipient.email, 'bulk_email', true],
         );
-        
+
         sentCount++;
 
         // 6-second delay between emails (10 per minute)
@@ -175,12 +242,11 @@ router.post('/send', authMiddleware, superAdminMiddleware, async (req, res) => {
         console.error(`Failed to send to ${recipient.email}:`, error.message);
         failedCount++;
         errors.push({ email: recipient.email, error: error.message });
-        
-        // Log failed send
+
         try {
           await db.query(
             'INSERT INTO email_send_log (recipient_email, send_type, success) VALUES ($1, $2, $3)',
-            [recipient.email, 'bulk_email', false]
+            [recipient.email, 'bulk_email', false],
           );
         } catch (logError) {
           console.error('Failed to log email failure:', logError);
@@ -188,7 +254,7 @@ router.post('/send', authMiddleware, superAdminMiddleware, async (req, res) => {
       }
     }
 
-    console.log(`📧 Bulk email sent by ${req.user.email}: ${sentCount} sent, ${failedCount} failed`);
+    console.log(`📧 Bulk email sent via ${provider} by ${req.user.email}: ${sentCount} sent, ${failedCount} failed`);
 
     res.json({
       success: true,
@@ -196,7 +262,7 @@ router.post('/send', authMiddleware, superAdminMiddleware, async (req, res) => {
       sent: sentCount,
       failed: failedCount,
       total: recipients.length,
-      errors: errors.length > 0 ? errors : undefined
+      errors: errors.length > 0 ? errors : undefined,
     });
   } catch (error) {
     console.error('Error sending bulk email:', error);
@@ -204,7 +270,7 @@ router.post('/send', authMiddleware, superAdminMiddleware, async (req, res) => {
   }
 });
 
-// Get recipient count preview
+// Get recipient preview — returns both counts and the full individual list
 router.post('/preview', authMiddleware, superAdminMiddleware, async (req, res) => {
   try {
     const { ticketTypes } = req.body;
@@ -214,25 +280,37 @@ router.post('/preview', authMiddleware, superAdminMiddleware, async (req, res) =
     }
 
     const placeholders = ticketTypes.map((_, i) => `$${i + 1}`).join(', ');
-    const query = `
-      SELECT 
-        ticket_type,
-        COUNT(DISTINCT email) as count
-      FROM tickets
-      WHERE ticket_type IN (${placeholders})
-      AND email IS NOT NULL
-      AND email != ''
-      AND (status IS NULL OR status = 'valid')
-      GROUP BY ticket_type
-    `;
 
-    const result = await db.query(query, ticketTypes);
-    
-    const total = result.rows.reduce((sum, row) => sum + parseInt(row.count), 0);
+    // Individual recipient rows
+    const recipientsResult = await db.query(
+      `SELECT DISTINCT ON (email) email, name, ticket_type
+       FROM tickets
+       WHERE ticket_type IN (${placeholders})
+         AND email IS NOT NULL
+         AND email != ''
+         AND (status IS NULL OR status = 'valid')
+       ORDER BY email`,
+      ticketTypes,
+    );
+
+    // Per-type count breakdown
+    const breakdownResult = await db.query(
+      `SELECT ticket_type, COUNT(DISTINCT email) as count
+       FROM tickets
+       WHERE ticket_type IN (${placeholders})
+         AND email IS NOT NULL
+         AND email != ''
+         AND (status IS NULL OR status = 'valid')
+       GROUP BY ticket_type`,
+      ticketTypes,
+    );
+
+    const total = breakdownResult.rows.reduce((sum, row) => sum + parseInt(row.count), 0);
 
     res.json({
-      breakdown: result.rows,
-      total: total
+      recipients: recipientsResult.rows,
+      breakdown: breakdownResult.rows,
+      total,
     });
   } catch (error) {
     console.error('Error getting recipient preview:', error);

@@ -6,8 +6,8 @@ services:
     container_name: convention-db-dev
     environment:
       POSTGRES_DB: convention_tickets
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data_dev:/var/lib/postgresql/data
     ports:
@@ -25,14 +25,15 @@ services:
     container_name: convention-backend-dev
     environment:
       PORT: 3000
-      DATABASE_URL: postgresql://postgres:password@db:5432/convention_tickets
-      JWT_SECRET: your-secret-key-change-this-in-production
-      JWT_EXPIRES_IN: 7d
-      SMTP_HOST: ${SMTP_HOST}
-      SMTP_PORT: ${SMTP_PORT}
-      SMTP_USER: ${SMTP_USER}
-      SMTP_PASS: ${SMTP_PASS}
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      RESEND_API_KEY: ${RESEND_API_KEY}
       EMAIL_FROM: ${EMAIL_FROM}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      GMAIL_USER: ${GMAIL_USER}
+      GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD}
+      SHOPIFY_API_KEY: ${SHOPIFY_API_KEY}
       FRONTEND_URL: ${FRONTEND_URL}
     ports:
       - "3000:3000"
