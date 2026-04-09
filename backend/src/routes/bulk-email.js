@@ -37,6 +37,7 @@ function getAvailableProviders() {
   return providers;
 }
 
+// Returns { html, attachments } — logo is sent as a CID inline attachment (same as ticket emails)
 async function buildEmailHtml({ body, recipientName, includeLogo, includeFooter }) {
   // Convert plain-text line breaks to HTML paragraphs if body doesn't already contain block tags
   const hasBlockTags = /<(p|div|h[1-6]|ul|ol|li|br|blockquote)\b/i.test(body);
@@ -51,8 +52,9 @@ async function buildEmailHtml({ body, recipientName, includeLogo, includeFooter 
       .join('\n');
   }
 
-  // Logo banner
+  // Logo banner — use CID inline attachment, not base64 data URI
   let logoBanner = '';
+  const attachments = [];
   if (includeLogo) {
     try {
       const settingsResult = await db.query('SELECT convention_name, logo_url FROM settings LIMIT 1');
@@ -61,12 +63,15 @@ async function buildEmailHtml({ body, recipientName, includeLogo, includeFooter 
         if (logo_url) {
           const logoPath = path.join(__dirname, '../..', logo_url);
           if (fs.existsSync(logoPath)) {
-            const ext = path.extname(logo_url).slice(1).toLowerCase();
-            const mime = ext === 'svg' ? 'image/svg+xml' : `image/${ext}`;
-            const b64 = fs.readFileSync(logoPath).toString('base64');
+            const logoBase64 = fs.readFileSync(logoPath).toString('base64');
+            attachments.push({
+              filename: 'logo.png',
+              content: logoBase64,
+              content_id: 'bulklogo',
+            });
             logoBanner = `
               <div style="text-align:center;padding:24px 0 16px;">
-                <img src="data:${mime};base64,${b64}" alt="${convention_name}" style="max-width:200px;max-height:80px;object-fit:contain;" />
+                <img src="cid:bulklogo" alt="${convention_name}" style="max-width:200px;max-height:80px;object-fit:contain;" />
               </div>`;
           }
         }
@@ -81,7 +86,7 @@ async function buildEmailHtml({ body, recipientName, includeLogo, includeFooter 
        </div>`
     : '';
 
-  return `
+  const html = `
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#222;text-align:left;">
       ${logoBanner}
       <div style="padding:8px 0;">
@@ -90,9 +95,12 @@ async function buildEmailHtml({ body, recipientName, includeLogo, includeFooter 
       ${footer}
     </div>
   `;
+
+  return { html, attachments };
 }
 
-async function sendEmail({ provider, to, subject, html }) {  if (provider === 'gmail') {
+async function sendEmail({ provider, to, subject, html, attachments = [] }) {
+  if (provider === 'gmail') {
     const transporter = getGmailTransporter();
     if (!transporter) throw new Error('Gmail is not configured');
     await transporter.sendMail({
@@ -100,6 +108,11 @@ async function sendEmail({ provider, to, subject, html }) {  if (provider === 'g
       to,
       subject,
       html,
+      attachments: attachments.map(a => ({
+        filename: a.filename,
+        content: Buffer.from(a.content, 'base64'),
+        cid: a.content_id,
+      })),
     });
   } else {
     // Default: resend
@@ -110,6 +123,7 @@ async function sendEmail({ provider, to, subject, html }) {  if (provider === 'g
       to,
       subject,
       html,
+      attachments,
     });
   }
 }
@@ -136,7 +150,7 @@ router.post('/test', authMiddleware, superAdminMiddleware, async (req, res) => {
       return res.status(400).json({ error: `Provider "${provider}" is not configured` });
     }
 
-    const bodyHtml = await buildEmailHtml({
+    const { html: bodyHtml, attachments } = await buildEmailHtml({
       body,
       recipientName: req.user.name || req.user.email,
       includeLogo,
@@ -158,6 +172,7 @@ router.post('/test', authMiddleware, superAdminMiddleware, async (req, res) => {
           </div>
         </div>
       `,
+      attachments,
     });
 
     console.log(`📧 Test email sent to ${testEmail} via ${provider} by ${req.user.email}`);
@@ -275,7 +290,7 @@ router.post('/send', authMiddleware, superAdminMiddleware, async (req, res) => {
 
     for (const recipient of recipients) {
       try {
-        const html = await buildEmailHtml({
+        const { html, attachments } = await buildEmailHtml({
           body,
           recipientName: recipient.name,
           includeLogo,
@@ -287,6 +302,7 @@ router.post('/send', authMiddleware, superAdminMiddleware, async (req, res) => {
           to: recipient.email,
           subject,
           html,
+          attachments,
         });
 
         await db.query(
