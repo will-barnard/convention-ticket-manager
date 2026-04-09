@@ -35,7 +35,6 @@ services:
       GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD}
       SHOPIFY_API_KEY: ${SHOPIFY_API_KEY}
       FRONTEND_URL: ${FRONTEND_URL}
-      BACKEND_URL: ${BACKEND_URL}
     ports:
       - "49191:3000"
     depends_on:
