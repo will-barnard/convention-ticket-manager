@@ -1,8 +1,6 @@
 const express = require('express');
 const { Resend } = require('resend');
 const nodemailer = require('nodemailer');
-const path = require('path');
-const fs = require('fs');
 const db = require('../config/database');
 const authMiddleware = require('../middleware/auth');
 const superAdminMiddleware = require('../middleware/superadmin');
@@ -59,16 +57,12 @@ async function buildEmailHtml({ body, recipientName, includeLogo, includeFooter 
       if (settingsResult.rows.length > 0) {
         const { convention_name, logo_url } = settingsResult.rows[0];
         if (logo_url) {
-          const logoPath = path.join(__dirname, '../..', logo_url);
-          if (fs.existsSync(logoPath)) {
-            const ext = path.extname(logo_url).slice(1).toLowerCase();
-            const mime = ext === 'svg' ? 'image/svg+xml' : `image/${ext}`;
-            const b64 = fs.readFileSync(logoPath).toString('base64');
-            logoBanner = `
+          const baseUrl = (process.env.BACKEND_URL || process.env.FRONTEND_URL || '').replace(/\/$/, '');
+          const logoUrl = `${baseUrl}${logo_url.startsWith('/') ? '' : '/'}${logo_url}`;
+          logoBanner = `
               <div style="text-align:center;padding:24px 0 16px;">
-                <img src="data:${mime};base64,${b64}" alt="${convention_name}" style="max-width:200px;max-height:80px;object-fit:contain;" />
+                <img src="${logoUrl}" alt="${convention_name}" style="max-width:200px;max-height:80px;object-fit:contain;" />
               </div>`;
-          }
         }
       }
     } catch (_) { /* logo is optional — skip silently */ }
