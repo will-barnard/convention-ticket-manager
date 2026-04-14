@@ -255,29 +255,31 @@ router.post('/send', authMiddleware, superAdminMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'No valid recipients found' });
     }
 
-    // Check daily email limit
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    // Check daily email limit (not applicable for Gmail)
+    if (provider !== 'gmail') {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
 
-    const quotaResult = await db.query(
-      'SELECT COUNT(*) as sent_today FROM email_send_log WHERE sent_at >= $1 AND success = true',
-      [todayStart],
-    );
+      const quotaResult = await db.query(
+        'SELECT COUNT(*) as sent_today FROM email_send_log WHERE sent_at >= $1 AND success = true',
+        [todayStart],
+      );
 
-    const sentToday = parseInt(quotaResult.rows[0].sent_today);
-    const dailyLimit = 100;
-    const remaining = Math.max(0, dailyLimit - sentToday);
+      const sentToday = parseInt(quotaResult.rows[0].sent_today);
+      const dailyLimit = 100;
+      const remaining = Math.max(0, dailyLimit - sentToday);
 
-    if (remaining === 0) {
-      return res.status(429).json({
-        error: 'Daily email limit of 100 emails reached. Please try again tomorrow.',
-      });
-    }
+      if (remaining === 0) {
+        return res.status(429).json({
+          error: 'Daily email limit of 100 emails reached. Please try again tomorrow.',
+        });
+      }
 
-    if (recipients.length > remaining) {
-      return res.status(429).json({
-        error: `Cannot send ${recipients.length} emails. Only ${remaining} emails remaining in today's quota of 100.`,
-      });
+      if (recipients.length > remaining) {
+        return res.status(429).json({
+          error: `Cannot send ${recipients.length} emails. Only ${remaining} emails remaining in today's quota of 100.`,
+        });
+      }
     }
 
     // Update rate limit timestamp
