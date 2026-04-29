@@ -176,20 +176,6 @@ async function runMigrations() {
     `);
     console.log('✓ Email send log index created');
     
-    // Add timezone column to settings table
-    await db.query(`
-      DO $$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns 
-          WHERE table_name = 'settings' AND column_name = 'timezone'
-        ) THEN
-          ALTER TABLE settings ADD COLUMN timezone VARCHAR(100) DEFAULT 'America/Chicago';
-        END IF;
-      END $$;
-    `);
-    console.log('✓ Timezone field added to settings table');
-
     // Create settings table
     await db.query(`
       CREATE TABLE IF NOT EXISTS settings (
@@ -209,6 +195,20 @@ async function runMigrations() {
       await db.query(`INSERT INTO settings (convention_name) VALUES ('My Convention')`);
       console.log('✓ Default settings inserted');
     }
+
+    // Add timezone column to settings table (must run AFTER settings is created)
+    await db.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'settings' AND column_name = 'timezone'
+        ) THEN
+          ALTER TABLE settings ADD COLUMN timezone VARCHAR(100) DEFAULT 'America/Chicago';
+        END IF;
+      END $$;
+    `);
+    console.log('✓ Timezone field added to settings table');
 
     // Create ticket_scans table
     await db.query(`
