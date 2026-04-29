@@ -126,40 +126,40 @@ router.post('/',
       const settingsResult = await db.query('SELECT auto_send_emails FROM settings LIMIT 1');
       const autoSendEmails = settingsResult.rows.length > 0 ? settingsResult.rows[0].auto_send_emails : true;
 
-      const createdTickets = [];
       let emailError = null;
 
-      // Create tickets (one or multiple)
-      for (let i = 0; i < ticketQuantity; i++) {
-        const ticketUuid = uuidv4();
-        const verifyUrl = `${process.env.FRONTEND_URL}/verify/${ticketUuid}`;
+      // Atomically insert all tickets + supplies. Either every row lands or none do —
+      // partial inserts would leave orphan tickets for a customer who never got an email.
+      const rawTickets = await db.transaction(async (client) => {
+        const created = [];
+        for (let i = 0; i < ticketQuantity; i++) {
+          const ticketUuid = uuidv4();
+          const result = await client.query(
+            'INSERT INTO tickets (ticket_type, ticket_subtype, name, teacher_name, email, uuid, shopify_order_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+            [ticketType, ticketSubtype || null, name, teacherName || null, email, ticketUuid, manualOrderId]
+          );
+          const ticket = result.rows[0];
 
-        // Save ticket to database
-        const result = await db.query(
-          'INSERT INTO tickets (ticket_type, ticket_subtype, name, teacher_name, email, uuid, shopify_order_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-          [ticketType, ticketSubtype || null, name, teacherName || null, email, ticketUuid, manualOrderId]
-        );
-
-        const ticket = result.rows[0];
-
-        // Save supplies if this is an exhibitor ticket (only for first ticket if multiple)
-        if (i === 0 && ticketType === 'exhibitor' && supplies && supplies.length > 0) {
-          for (const supply of supplies) {
-            await db.query(
-              'INSERT INTO ticket_supplies (ticket_id, supply_name, quantity) VALUES ($1, $2, $3)',
-              [ticket.id, supply.name, supply.quantity || 1]
-            );
+          if (i === 0 && ticketType === 'exhibitor' && supplies && supplies.length > 0) {
+            for (const supply of supplies) {
+              await client.query(
+                'INSERT INTO ticket_supplies (ticket_id, supply_name, quantity) VALUES ($1, $2, $3)',
+                [ticket.id, supply.name, supply.quantity || 1]
+              );
+            }
           }
+          created.push(ticket);
         }
+        return created;
+      });
 
-        // Generate QR code
+      // QR generation and email are deliberately outside the transaction —
+      // they're slow and/or call external services; we don't want them holding a DB connection.
+      const createdTickets = [];
+      for (const ticket of rawTickets) {
+        const verifyUrl = `${process.env.FRONTEND_URL}/verify/${ticket.uuid}`;
         const qrCodeDataUrl = await QRCode.toDataURL(verifyUrl);
-        
-        createdTickets.push({
-          ...ticket,
-          qrCodeDataUrl,
-          verifyUrl
-        });
+        createdTickets.push({ ...ticket, qrCodeDataUrl, verifyUrl });
       }
 
       // Send email with QR code(s) if auto-send is enabled
@@ -287,60 +287,57 @@ router.post('/create-order',
       const settingsResult = await db.query('SELECT auto_send_emails FROM settings LIMIT 1');
       const autoSendEmails = settingsResult.rows.length > 0 ? settingsResult.rows[0].auto_send_emails : true;
 
-      const createdTickets = [];
       let emailError = null;
 
-      // Create all tickets
-      for (const ticketItem of ticketItems) {
-        const { ticketType, ticketSubtype, name, teacherName, quantity, supplies, boothRange } = ticketItem;
-        const ticketQuantity = quantity || 1;
+      // Insert every ticket + supplies for this order inside one transaction.
+      const rawTickets = await db.transaction(async (client) => {
+        const created = [];
+        for (const ticketItem of ticketItems) {
+          const { ticketType, ticketSubtype, name, teacherName, quantity, supplies, boothRange } = ticketItem;
+          const ticketQuantity = quantity || 1;
+          // Exhibitor tickets are one row with a quantity column; everything else is per-person.
+          const ticketsToCreate = ticketType === 'exhibitor' ? 1 : ticketQuantity;
 
-        // For exhibitor tickets, create ONE ticket with quantity field
-        // For other types, create multiple individual tickets
-        const ticketsToCreate = ticketType === 'exhibitor' ? 1 : ticketQuantity;
+          for (let i = 0; i < ticketsToCreate; i++) {
+            const ticketUuid = uuidv4();
+            const result = await client.query(
+              'INSERT INTO tickets (ticket_type, ticket_subtype, name, teacher_name, email, uuid, shopify_order_id, booth_range, quantity) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
+              [
+                ticketType,
+                ticketSubtype || null,
+                name,
+                teacherName || null,
+                customerEmail,
+                ticketUuid,
+                manualOrderId,
+                boothRange || null,
+                ticketType === 'exhibitor' ? (quantity || 1) : null
+              ]
+            );
+            const ticket = result.rows[0];
 
-        for (let i = 0; i < ticketsToCreate; i++) {
-          const ticketUuid = uuidv4();
-          const verifyUrl = `${process.env.FRONTEND_URL}/verify/${ticketUuid}`;
-
-          // Save ticket to database with booth_range and quantity for exhibitor tickets
-          const result = await db.query(
-            'INSERT INTO tickets (ticket_type, ticket_subtype, name, teacher_name, email, uuid, shopify_order_id, booth_range, quantity) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
-            [
-              ticketType, 
-              ticketSubtype || null, 
-              name, 
-              teacherName || null, 
-              customerEmail,
-              ticketUuid,
-              manualOrderId,
-              boothRange || null,
-              ticketType === 'exhibitor' ? (quantity || 1) : null
-            ]
-          );
-          const ticket = result.rows[0];
-
-          // Save supplies if this is an exhibitor ticket
-          if (ticketType === 'exhibitor' && supplies && supplies.length > 0) {
-            for (const supply of supplies) {
-              if (supply.name && supply.name.trim()) {
-                await db.query(
-                  'INSERT INTO ticket_supplies (ticket_id, supply_name, quantity) VALUES ($1, $2, $3)',
-                  [ticket.id, supply.name, supply.quantity || 1]
-                );
+            if (ticketType === 'exhibitor' && supplies && supplies.length > 0) {
+              for (const supply of supplies) {
+                if (supply.name && supply.name.trim()) {
+                  await client.query(
+                    'INSERT INTO ticket_supplies (ticket_id, supply_name, quantity) VALUES ($1, $2, $3)',
+                    [ticket.id, supply.name, supply.quantity || 1]
+                  );
+                }
               }
             }
+            created.push(ticket);
           }
-
-          // Generate QR code
-          const qrCodeDataUrl = await QRCode.toDataURL(verifyUrl);
-          
-          createdTickets.push({
-            ...ticket,
-            qrCodeDataUrl,
-            verifyUrl
-          });
         }
+        return created;
+      });
+
+      // QR + email outside the transaction (external calls should not hold a DB connection).
+      const createdTickets = [];
+      for (const ticket of rawTickets) {
+        const verifyUrl = `${process.env.FRONTEND_URL}/verify/${ticket.uuid}`;
+        const qrCodeDataUrl = await QRCode.toDataURL(verifyUrl);
+        createdTickets.push({ ...ticket, qrCodeDataUrl, verifyUrl });
       }
 
       // Send consolidated email with all QR codes if auto-send is enabled and email provided

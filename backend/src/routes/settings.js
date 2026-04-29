@@ -38,12 +38,28 @@ const upload = multer({
   }
 });
 
+// Public settings shape — never includes receive_mode_secret or receive_mode_enabled.
+// Admin UI should call GET /admin (auth required) to read those.
+const PUBLIC_SETTINGS_COLUMNS = [
+  'id',
+  'convention_name',
+  'logo_url',
+  'enable_ticket_cap',
+  'ticket_cap',
+  'friday_date',
+  'saturday_date',
+  'sunday_date',
+  'auto_send_emails',
+  'lockdown_mode',
+  'timezone',
+];
+
 // Get settings (public - no auth required for logo on login pages)
 router.get('/', async (req, res) => {
   try {
-    const result = await db.query('SELECT * FROM settings LIMIT 1');
+    const cols = PUBLIC_SETTINGS_COLUMNS.join(', ');
+    const result = await db.query(`SELECT ${cols} FROM settings LIMIT 1`);
     if (result.rows.length === 0) {
-      // Return default settings if none exist
       return res.json({
         id: 1,
         convention_name: 'My Convention',
@@ -61,6 +77,20 @@ router.get('/', async (req, res) => {
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error fetching settings:', error);
+    res.status(500).json({ error: 'Failed to fetch settings' });
+  }
+});
+
+// Full settings including sensitive fields (superadmin only) — used by the admin UI
+router.get('/admin', superAdminMiddleware, async (req, res) => {
+  try {
+    const result = await db.query('SELECT * FROM settings LIMIT 1');
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Settings not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error fetching admin settings:', error);
     res.status(500).json({ error: 'Failed to fetch settings' });
   }
 });

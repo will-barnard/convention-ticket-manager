@@ -447,9 +447,18 @@ export default {
 
     const fetchSettings = async () => {
       try {
-        const response = await axios.get('/api/settings');
-        const data = response.data;
-        
+        // Admin settings page needs the sensitive fields (receive_mode_*), which the
+        // public endpoint no longer returns. Fall back to the public endpoint if the
+        // caller doesn't have superadmin (e.g., session expired).
+        let data;
+        try {
+          const response = await axios.get('/api/settings/admin');
+          data = response.data;
+        } catch (adminErr) {
+          const response = await axios.get('/api/settings');
+          data = response.data;
+        }
+
         // Format dates for HTML5 date inputs (YYYY-MM-DD)
         if (data.friday_date) {
           data.friday_date = new Date(data.friday_date).toISOString().split('T')[0];
@@ -460,13 +469,13 @@ export default {
         if (data.sunday_date) {
           data.sunday_date = new Date(data.sunday_date).toISOString().split('T')[0];
         }
-        
+
         settings.value = data;
-        
+
         // Load receive mode settings
         receiveModeEnabled.value = data.receive_mode_enabled || false;
         receiveModeSecret.value = data.receive_mode_secret || '';
-        
+
         // Load lockdown mode setting
         lockdownEnabled.value = data.lockdown_mode || false;
       } catch (error) {

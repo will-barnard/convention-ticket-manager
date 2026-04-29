@@ -2,10 +2,19 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
 const pool = require('../config/database');
 
+const verifierLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts, please try again later' },
+});
+
 // Verifier login endpoint
-router.post('/verifier-login', async (req, res) => {
+router.post('/verifier-login', verifierLoginLimiter, async (req, res) => {
   try {
     const { username, password } = req.body;
 

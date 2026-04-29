@@ -3,6 +3,28 @@ const db = require('../config/database');
 const fs = require('fs');
 const path = require('path');
 
+// HTML escape for user-supplied strings interpolated into email templates.
+function escapeHtml(value) {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Mask an email for logs: "a***@example.com".
+function maskEmail(email) {
+  if (!email || typeof email !== 'string') return '';
+  const at = email.indexOf('@');
+  if (at <= 0) return '***';
+  const local = email.slice(0, at);
+  const domain = email.slice(at + 1);
+  const shown = local.slice(0, Math.min(1, local.length));
+  return `${shown}***@${domain}`;
+}
+
 // Check if email is configured
 const isEmailConfigured = process.env.RESEND_API_KEY;
 
@@ -21,11 +43,8 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
     return { success: false, message: 'Email not configured' };
   }
 
-  // Debug: Log email configuration
-  console.log('📧 Resend Email Configuration:');
-  console.log('   RESEND_API_KEY:', process.env.RESEND_API_KEY ? `${process.env.RESEND_API_KEY.substring(0, 8)}****` : 'NOT SET');
-  console.log('   EMAIL_FROM:', process.env.EMAIL_FROM);
-  console.log('   Sending to:', to);
+  // Debug: Log email configuration (recipient is masked — full emails are PII)
+  console.log('📧 Sending ticket email via Resend to:', maskEmail(to));
   
   const ticketTypeLabels = {
     student: 'Student Ticket',
@@ -67,17 +86,23 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
     console.log('Note: Could not fetch convention settings, using defaults');
   }
 
+  const safeConventionName = escapeHtml(conventionName);
+  const safeName = escapeHtml(name);
+
   // Handle consolidated email with multiple tickets
   if (tickets && Array.isArray(tickets) && tickets.length > 0) {
     let ticketsHtml = '';
     const attachments = [];
-    
+
     tickets.forEach((ticket, index) => {
       let ticketLabel = ticketTypeLabels[ticket.ticket_type] || 'Convention Ticket';
       if (ticket.ticket_type === 'attendee' && ticket.ticket_subtype) {
         ticketLabel = subtypeLabels[ticket.ticket_subtype] || ticketLabel;
       }
-      
+      // ticketLabel comes from the hard-coded maps above, so it's safe,
+      // but escape defensively in case a caller passes a custom label.
+      const safeTicketLabel = escapeHtml(ticketLabel);
+
       // Prepare QR code attachment
       const base64Data = ticket.qrCodeDataUrl.replace(/^data:image\/png;base64,/, '');
       attachments.push({
@@ -85,11 +110,11 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
         content: base64Data,
         content_id: `qrcode${index}`
       });
-      
+
       ticketsHtml += `
         <div style="background: white; padding: 25px; border-radius: 8px; margin-bottom: 25px; border: 2px solid #ddd;">
           <h2 style="color: #4CAF50; margin-top: 0; border-bottom: 2px solid #4CAF50; padding-bottom: 10px;">
-            Ticket ${index + 1} of ${tickets.length}: ${ticketLabel}
+            Ticket ${index + 1} of ${tickets.length}: ${safeTicketLabel}
           </h2>
           <div style="text-align: center; margin: 20px 0;">
             <img src="cid:qrcode${index}" style="max-width: 300px; border: 2px solid #ddd; padding: 10px; background: white;" alt="QR Code ${index + 1}"/>
@@ -154,16 +179,16 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
         <body>
           <div class="container">
             ${logoBase64 ? `<div style="text-align: center; padding: 20px 0; background-color: white;">
-              <img src="cid:logo" alt="${conventionName}" style="max-width: 100%; max-height: 150px; object-fit: contain;" />
+              <img src="cid:logo" alt="${safeConventionName}" style="max-width: 100%; max-height: 150px; object-fit: contain;" />
             </div>` : ''}
             <div class="header">
-              <h1 style="margin: 0;">Your ${conventionName} Tickets</h1>
+              <h1 style="margin: 0;">Your ${safeConventionName} Tickets</h1>
             </div>
             <div class="content">
-              <p>Hello ${name},</p>
-              <p>Thank you for your order! Below are your <strong>${tickets.length} ticket(s)</strong> for ${conventionName}. Each ticket has a unique QR code.</p>
+              <p>Hello ${safeName},</p>
+              <p>Thank you for your order! Below are your <strong>${tickets.length} ticket(s)</strong> for ${safeConventionName}. Each ticket has a unique QR code.</p>
               <p><strong>Important:</strong> Please present each QR code at the entrance for check-in. You can print this email or show it on your phone.</p>
-              
+
               ${ticketsHtml}
 
               <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 5px; margin-top: 20px;">
@@ -176,7 +201,7 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
               </div>
             </div>
             <div class="footer">
-              <p>See you at ${conventionName}!</p>
+              <p>See you at ${safeConventionName}!</p>
               <p>If you have any questions, please contact us.</p>
             </div>
           </div>
@@ -192,7 +217,9 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
   if (ticketType === 'attendee' && ticketSubtype) {
     ticketLabel = subtypeLabels[ticketSubtype] || ticketLabel;
   }
-  
+  const safeTicketLabel = escapeHtml(ticketLabel);
+  const safeTeacherName = escapeHtml(teacherName);
+
   // Build supplies list HTML
   let suppliesHtml = '';
   if (ticketType === 'exhibitor' && supplies && supplies.length > 0) {
@@ -200,18 +227,18 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
       <div style="background: #e8f5e9; padding: 15px; border-radius: 5px; margin: 20px 0;">
         <h3 style="margin-top: 0; color: #2e7d32;">Supplies Provided:</h3>
         <ul style="margin: 10px 0;">
-          ${supplies.map(s => `<li>${s.name} (Quantity: ${s.quantity})</li>`).join('')}
+          ${supplies.map(s => `<li>${escapeHtml(s.name)} (Quantity: ${escapeHtml(s.quantity)})</li>`).join('')}
         </ul>
       </div>
     `;
   }
 
   // Build ticket details HTML
-  let detailsHtml = `<p><strong>Name:</strong> ${name}</p>`;
+  let detailsHtml = `<p><strong>Name:</strong> ${safeName}</p>`;
   if (ticketType === 'student' && teacherName) {
-    detailsHtml += `<p><strong>Teacher:</strong> ${teacherName}</p>`;
+    detailsHtml += `<p><strong>Teacher:</strong> ${safeTeacherName}</p>`;
   }
-  detailsHtml += `<p><strong>Type:</strong> ${ticketLabel}</p>`;
+  detailsHtml += `<p><strong>Type:</strong> ${safeTicketLabel}</p>`;
 
   // Convert base64 QR code to buffer for attachment
   const base64Data = qrCodeDataUrl.replace(/^data:image\/png;base64,/, '');
@@ -237,7 +264,7 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
   return resend.emails.send({
     from: process.env.EMAIL_FROM,
     to: to,
-    subject: `Your ${ticketLabel}`,
+    subject: `Your ${ticketLabel}`, // plain-text subject, no HTML context
     html: `
       <!DOCTYPE html>
       <html>
@@ -293,28 +320,28 @@ async function sendTicketEmail({ to, name, ticketType, ticketSubtype, teacherNam
       <body>
         <div class="container">
           ${logoBase64 ? `<div style="text-align: center; padding: 20px 0; background-color: white;">
-            <img src="cid:logo" alt="${conventionName}" style="max-width: 100%; max-height: 150px; object-fit: contain;" />
+            <img src="cid:logo" alt="${safeConventionName}" style="max-width: 100%; max-height: 150px; object-fit: contain;" />
           </div>` : ''}
           <div class="header">
-            <h1>${ticketLabel}</h1>
+            <h1>${safeTicketLabel}</h1>
           </div>
           <div class="content">
-            <h2>Hello ${name}!</h2>
-            <p>Your ${conventionName} ticket has been issued.</p>
+            <h2>Hello ${safeName}!</h2>
+            <p>Your ${safeConventionName} ticket has been issued.</p>
             ${detailsHtml}
             ${suppliesHtml}
-            
+
             <div class="qr-code">
               <p><strong>Your Ticket QR Code:</strong></p>
               <img src="cid:qrcode" alt="Ticket QR Code" />
               <div style="background: #4CAF50; color: white; padding: 12px 20px; border-radius: 6px; display: inline-block; margin-top: 15px; font-weight: bold; font-size: 16px;">
-                ${ticketLabel}
+                ${safeTicketLabel}
               </div>
               <p>Scan this QR code at the convention entrance</p>
             </div>
-            
+
             <p style="text-align: center;">
-              <a href="${verifyUrl}" class="button">View Ticket Online</a>
+              <a href="${encodeURI(verifyUrl || '')}" class="button">View Ticket Online</a>
             </p>
             
             <p><strong>Important:</strong> This ticket can only be used once. Please keep it safe and present it at the convention entrance.</p>
@@ -336,6 +363,31 @@ async function sendAdminNotification({ subject, message, ticketDetails }) {
   if (!isEmailConfigured || !resend || !process.env.ADMIN_EMAIL) {
     console.log('⚠️  Admin notification skipped - email or admin email not configured');
     return { success: false, message: 'Email not configured' };
+  }
+
+  const safeSubject = escapeHtml(subject);
+  const safeMessage = escapeHtml(message);
+
+  // ticketDetails is polymorphic — callers pass either a string (preformatted
+  // multi-line block) or an object with named fields. Render either safely.
+  let safeDetailsHtml = '';
+  if (typeof ticketDetails === 'string') {
+    safeDetailsHtml = `
+      <div class="details">
+        <h3>Details:</h3>
+        <pre style="white-space: pre-wrap; font-family: inherit; margin: 0;">${escapeHtml(ticketDetails)}</pre>
+      </div>
+    `;
+  } else if (ticketDetails && typeof ticketDetails === 'object') {
+    const parts = [];
+    if (ticketDetails.recipientEmail) parts.push(`<p><strong>Recipient Email:</strong> ${escapeHtml(ticketDetails.recipientEmail)}</p>`);
+    if (ticketDetails.recipientName) parts.push(`<p><strong>Recipient Name:</strong> ${escapeHtml(ticketDetails.recipientName)}</p>`);
+    if (ticketDetails.ticketType) parts.push(`<p><strong>Ticket Type:</strong> ${escapeHtml(ticketDetails.ticketType)}</p>`);
+    if (ticketDetails.ticketId) parts.push(`<p><strong>Ticket ID:</strong> ${escapeHtml(ticketDetails.ticketId)}</p>`);
+    if (ticketDetails.error) parts.push(`<p><strong>Error:</strong> <code>${escapeHtml(ticketDetails.error)}</code></p>`);
+    if (parts.length > 0) {
+      safeDetailsHtml = `<div class="details"><h3>Ticket Details:</h3>${parts.join('')}</div>`;
+    }
   }
 
   try {
@@ -393,20 +445,11 @@ async function sendAdminNotification({ subject, message, ticketDetails }) {
             <h1>⚠️ Admin Alert</h1>
           </div>
           <div class="content">
-            <h2>${subject}</h2>
-            <p>${message}</p>
-            
-            ${ticketDetails ? `
-              <div class="details">
-                <h3>Ticket Details:</h3>
-                ${ticketDetails.recipientEmail ? `<p><strong>Recipient Email:</strong> ${ticketDetails.recipientEmail}</p>` : ''}
-                ${ticketDetails.recipientName ? `<p><strong>Recipient Name:</strong> ${ticketDetails.recipientName}</p>` : ''}
-                ${ticketDetails.ticketType ? `<p><strong>Ticket Type:</strong> ${ticketDetails.ticketType}</p>` : ''}
-                ${ticketDetails.ticketId ? `<p><strong>Ticket ID:</strong> ${ticketDetails.ticketId}</p>` : ''}
-                ${ticketDetails.error ? `<p><strong>Error:</strong> <code>${ticketDetails.error}</code></p>` : ''}
-              </div>
-            ` : ''}
-            
+            <h2>${safeSubject}</h2>
+            <p>${safeMessage}</p>
+
+            ${safeDetailsHtml}
+
             <p><strong>Action Required:</strong> Please review this issue and take appropriate action.</p>
           </div>
           <div class="footer">
@@ -428,4 +471,6 @@ async function sendAdminNotification({ subject, message, ticketDetails }) {
 module.exports = {
   sendTicketEmail,
   sendAdminNotification,
+  escapeHtml,
+  maskEmail,
 };

@@ -25,16 +25,33 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors());
+const allowedOrigins = (process.env.CORS_ORIGINS || process.env.FRONTEND_URL || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
+app.use(cors({
+  origin: (origin, cb) => {
+    // Allow server-to-server/curl (no Origin header) and same-origin requests
+    if (!origin) return cb(null, true);
+    if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+      return cb(null, true);
+    }
+    return cb(new Error(`Origin ${origin} not allowed by CORS`));
+  },
+}));
+
+const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || '1mb';
 
 // Capture raw body for Shopify webhook verification
 app.use('/api/shopify', express.json({
+  limit: JSON_BODY_LIMIT,
   verify: (req, res, buf) => {
     req.rawBody = buf.toString('utf8');
   }
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: JSON_BODY_LIMIT }));
 app.use('/uploads', express.static('uploads'));
 
 // Routes

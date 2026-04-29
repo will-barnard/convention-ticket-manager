@@ -1,5 +1,6 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
 const db = require('../config/database');
 const authMiddleware = require('../middleware/auth');
@@ -7,9 +8,18 @@ const superAdminMiddleware = require('../middleware/superadmin');
 
 const router = express.Router();
 
+const passwordChangeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many password change attempts, please try again later' },
+});
+
 // Change password (protected)
 router.post('/change-password',
   authMiddleware,
+  passwordChangeLimiter,
   body('currentPassword').notEmpty(),
   body('newPassword').isLength({ min: 6 }),
   async (req, res) => {

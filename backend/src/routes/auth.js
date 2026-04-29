@@ -1,13 +1,25 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
 const db = require('../config/database');
+const superAdminMiddleware = require('../middleware/superadmin');
 
 const router = express.Router();
 
-// Register (for initial setup - you might want to restrict this in production)
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts, please try again later' },
+});
+
+// Register new users - restricted to superadmin. Initial superadmin is seeded via
+// npm run seed:superadmin (see src/migrations/seed-superadmin.js).
 router.post('/register',
+  superAdminMiddleware,
   body('username').trim().isLength({ min: 3 }),
   body('password').isLength({ min: 6 }),
   async (req, res) => {
@@ -57,6 +69,7 @@ router.post('/register',
 
 // Login
 router.post('/login',
+  loginLimiter,
   body('username').trim().notEmpty(),
   body('password').notEmpty(),
   async (req, res) => {

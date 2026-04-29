@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/database');
-const { sendTicketEmail, sendAdminNotification } = require('../services/email');
+const { sendTicketEmail, sendAdminNotification, maskEmail } = require('../services/email');
 const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
 const crypto = require('crypto');
@@ -127,7 +127,7 @@ router.post('/create-ticket', validateShopifyHmac, checkLockdown, async (req, re
     // Continue processing even if logging fails
   }
 
-  console.log(`📦 Processing order ${shopify_order_id} for ${customerName} (${customerEmail})`);
+  console.log(`📦 Processing order ${shopify_order_id} (${maskEmail(customerEmail)})`);
   console.log(`   Found ${line_items.length} line item(s) in order`);
 
   try {
@@ -211,50 +211,41 @@ router.post('/create-ticket', validateShopifyHmac, checkLockdown, async (req, re
     const settingsResult = await db.query('SELECT auto_send_emails FROM settings LIMIT 1');
     const autoSendEmails = settingsResult.rows[0]?.auto_send_emails ?? true;
 
-    const createdTickets = [];
-    const failedTickets = [];
+    // Insert every ticket for this order atomically. Shopify will retry the whole
+    // webhook on a non-2xx, so partial inserts would cause duplicates on retry.
+    const rawTickets = await db.transaction(async (client) => {
+      const created = [];
+      for (const lineItem of ticketLineItems) {
+        const sku = lineItem.sku.toLowerCase();
+        const ticketMapping = skuMapping[sku];
+        const quantity = lineItem.quantity || 1;
 
-    // Process each ticket line item - Create all tickets first without sending emails
-    for (const lineItem of ticketLineItems) {
-      const sku = lineItem.sku.toLowerCase();
-      const ticketMapping = skuMapping[sku];
-      const quantity = lineItem.quantity || 1;
+        console.log(`   Processing ${quantity}x ${lineItem.name} (SKU: ${sku} -> ${ticketMapping.type}/${ticketMapping.subtype || 'standard'})`);
 
-      console.log(`   Processing ${quantity}x ${lineItem.name} (SKU: ${sku} -> ${ticketMapping.type}/${ticketMapping.subtype || 'standard'})`);
-
-      // Create multiple tickets if quantity > 1
-      for (let i = 0; i < quantity; i++) {
-        try {
+        for (let i = 0; i < quantity; i++) {
           const uuid = uuidv4();
-          
-          // Insert ticket into database
-          const result = await db.query(
-            `INSERT INTO tickets (ticket_type, ticket_subtype, name, email, uuid, shopify_order_id, email_sent, created_at) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) 
+          const result = await client.query(
+            `INSERT INTO tickets (ticket_type, ticket_subtype, name, email, uuid, shopify_order_id, email_sent, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
              RETURNING *`,
             [ticketMapping.type, ticketMapping.subtype, customerName, customerEmail, uuid, shopify_order_id, false]
           );
-
-          const ticket = result.rows[0];
-
-          // Generate QR code
-          const frontendUrl = process.env.FRONTEND_URL || 'http://localhost';
-          const verifyUrl = `${frontendUrl}/verify/${ticket.uuid}`;
-          const qrCodeDataUrl = await QRCode.toDataURL(verifyUrl);
-
-          createdTickets.push({
-            ...ticket,
-            qrCodeDataUrl,
-            verifyUrl
-          });
-
+          created.push(result.rows[0]);
           console.log(`      ✓ Created ticket ${i + 1}/${quantity} for ${lineItem.name}`);
-        } catch (ticketError) {
-          console.error('Failed to create ticket:', ticketError);
-          failedTickets.push({ sku, error: ticketError.message });
         }
       }
+      return created;
+    });
+
+    // QR codes are generated outside the transaction (no DB work).
+    const createdTickets = [];
+    for (const ticket of rawTickets) {
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost';
+      const verifyUrl = `${frontendUrl}/verify/${ticket.uuid}`;
+      const qrCodeDataUrl = await QRCode.toDataURL(verifyUrl);
+      createdTickets.push({ ...ticket, qrCodeDataUrl, verifyUrl });
     }
+    const failedTickets = [];
 
     // Send one consolidated email with all tickets if auto_send_emails is enabled and email provided
     if (autoSendEmails && createdTickets.length > 0 && customerEmail) {
@@ -295,7 +286,7 @@ router.post('/create-ticket', validateShopifyHmac, checkLockdown, async (req, re
             );
           }
           
-          console.log(`📧 Sent consolidated email with ${createdTickets.length} ticket(s) to ${customerEmail}`);
+          console.log(`📧 Sent consolidated email with ${createdTickets.length} ticket(s) to ${maskEmail(customerEmail)}`);
         } else {
           // Daily limit reached, leave tickets marked as unsent
           console.log(`⚠️  Daily email limit reached (${sentToday}/${dailyLimit}). Tickets created but email NOT sent. Use batch send tomorrow.`);

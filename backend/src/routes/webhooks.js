@@ -217,7 +217,7 @@ router.post('/:id/retry', authMiddleware, async (req, res) => {
 
 // Helper functions for webhook retry processing
 async function retryOrderCreate(webhookData, webhookLogId) {
-  const { sendTicketEmail, sendAdminNotification } = require('../services/email');
+  const { sendTicketEmail, sendAdminNotification, maskEmail } = require('../services/email');
   const { v4: uuidv4 } = require('uuid');
   const QRCode = require('qrcode');
   
@@ -288,31 +288,33 @@ async function retryOrderCreate(webhookData, webhookLogId) {
   const settingsResult = await db.query('SELECT auto_send_emails FROM settings LIMIT 1');
   const autoSendEmails = settingsResult.rows[0]?.auto_send_emails ?? true;
   
-  const createdTickets = [];
-  
-  // Create tickets
-  for (const lineItem of ticketLineItems) {
-    const sku = lineItem.sku.toLowerCase();
-    const ticketMapping = skuMapping[sku];
-    const quantity = lineItem.quantity || 1;
-    
-    for (let i = 0; i < quantity; i++) {
-      const uuid = uuidv4();
-      
-      const result = await db.query(
-        `INSERT INTO tickets (ticket_type, ticket_subtype, name, email, uuid, shopify_order_id, email_sent, created_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) 
-         RETURNING *`,
-        [ticketMapping.type, ticketMapping.subtype, customerName, customerEmail, uuid, shopify_order_id, false]
-      );
-      
-      const ticket = result.rows[0];
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost';
-      const verifyUrl = `${frontendUrl}/verify/${ticket.uuid}`;
-      const qrCodeDataUrl = await QRCode.toDataURL(verifyUrl);
-      
-      createdTickets.push({ ...ticket, qrCodeDataUrl, verifyUrl });
+  // Atomically insert every ticket for this order (matches the live webhook path).
+  const rawTickets = await db.transaction(async (client) => {
+    const created = [];
+    for (const lineItem of ticketLineItems) {
+      const sku = lineItem.sku.toLowerCase();
+      const ticketMapping = skuMapping[sku];
+      const quantity = lineItem.quantity || 1;
+      for (let i = 0; i < quantity; i++) {
+        const uuid = uuidv4();
+        const result = await client.query(
+          `INSERT INTO tickets (ticket_type, ticket_subtype, name, email, uuid, shopify_order_id, email_sent, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+           RETURNING *`,
+          [ticketMapping.type, ticketMapping.subtype, customerName, customerEmail, uuid, shopify_order_id, false]
+        );
+        created.push(result.rows[0]);
+      }
     }
+    return created;
+  });
+
+  const createdTickets = [];
+  for (const ticket of rawTickets) {
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost';
+    const verifyUrl = `${frontendUrl}/verify/${ticket.uuid}`;
+    const qrCodeDataUrl = await QRCode.toDataURL(verifyUrl);
+    createdTickets.push({ ...ticket, qrCodeDataUrl, verifyUrl });
   }
   
   // Send email if enabled
