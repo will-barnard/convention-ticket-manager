@@ -1,6 +1,10 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const { runMigrations } = require('./migrations/run');
+const { seedAdminUser } = require('./migrations/seed');
+const { seedSuperAdminUser } = require('./migrations/seed-superadmin');
+const { seedVerifier } = require('./migrations/seed-verifier');
 
 // Debug: Log all email-related environment variables on startup
 console.log('🔍 Environment Variables Check:');
@@ -72,6 +76,33 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// Run migrations + seeds before listening. Migrations are advisory-locked so
+// blue/green backends serialize automatically; if they fail, the process exits
+// (a real misconfiguration we want to surface). Seeds are best-effort: a seed
+// failure should not keep the server from coming up.
+async function startServer() {
+  try {
+    await runMigrations();
+  } catch (err) {
+    console.error('Migrations failed — refusing to start:', err);
+    process.exit(1);
+  }
+
+  for (const [label, fn] of [
+    ['admin', seedAdminUser],
+    ['superadmin', seedSuperAdminUser],
+    ['verifier', seedVerifier],
+  ]) {
+    try {
+      await fn();
+    } catch (err) {
+      console.error(`Seed '${label}' failed (continuing):`, err.message);
+    }
+  }
+
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
+
+startServer();

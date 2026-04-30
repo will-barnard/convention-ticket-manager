@@ -2,6 +2,13 @@ require('dotenv').config();
 const db = require('../config/database');
 const path = require('path');
 
+// Stable advisory-lock key. Picked once and never changed — both backends in a
+// blue/green swap will block on the same key, so only one runs migrations at a
+// time. Using two 32-bit ints (the 2-arg form of pg_advisory_lock) so we don't
+// need to worry about JS numeric precision.
+const MIGRATION_LOCK_KEY_1 = 0x434f4e56; // 'CONV'
+const MIGRATION_LOCK_KEY_2 = 0x5449434b; // 'TICK'
+
 async function waitForDb(maxRetries = 30, delayMs = 1000) {
   for (let i = 0; i < maxRetries; i++) {
     try {
@@ -16,11 +23,21 @@ async function waitForDb(maxRetries = 30, delayMs = 1000) {
   }
 }
 
-async function runMigrations() {
-  try {
-    console.log('Running migrations...');
-    await waitForDb();
+async function runMigrationsLocked() {
+  console.log('Running migrations...');
+  await waitForDb();
 
+  // Acquire advisory lock to serialize concurrent migrations across blue/green
+  // backends. Held until we explicitly unlock or the session ends.
+  await db.query('SELECT pg_advisory_lock($1, $2)', [MIGRATION_LOCK_KEY_1, MIGRATION_LOCK_KEY_2]);
+  try {
+    await runMigrationBody();
+  } finally {
+    await db.query('SELECT pg_advisory_unlock($1, $2)', [MIGRATION_LOCK_KEY_1, MIGRATION_LOCK_KEY_2]);
+  }
+}
+
+async function runMigrationBody() {
     // Create users table
     await db.query(`
       CREATE TABLE IF NOT EXISTS users (
@@ -412,11 +429,17 @@ async function runMigrations() {
     console.log('✓ email_sent and email_sent_at columns ensured on tickets');
 
     console.log('Migrations completed successfully!');
-    process.exit(0);
-  } catch (error) {
-    console.error('Migration error:', error);
-    process.exit(1);
-  }
 }
 
-runMigrations();
+module.exports = { runMigrations: runMigrationsLocked };
+
+// Allow running as a CLI: `node src/migrations/run.js` or `npm run migrate`.
+// In that mode we exit explicitly; when imported by server.js we just resolve.
+if (require.main === module) {
+  runMigrationsLocked()
+    .then(() => process.exit(0))
+    .catch((error) => {
+      console.error('Migration error:', error);
+      process.exit(1);
+    });
+}

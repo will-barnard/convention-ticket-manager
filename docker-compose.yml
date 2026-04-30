@@ -44,7 +44,9 @@ services:
         condition: service_healthy
     volumes:
       - backend_uploads:/app/uploads
-    command: sh -c "npm run migrate && npm run seed && node src/migrations/seed-superadmin.js && node src/migrations/seed-verifier.js && npm start"
+    # No command override — server.js runs migrations + seeds itself before
+    # listening, guarded by a postgres advisory lock so blue/green backends
+    # don't race. The Dockerfile's CMD ["npm", "start"] runs unmodified.
     networks:
       - internal
 
