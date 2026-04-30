@@ -1,10 +1,11 @@
 services:
   db:
     image: postgres:15-alpine
+    env_file: .env
     environment:
       POSTGRES_DB: convention_tickets
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     expose:
@@ -22,9 +23,10 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    env_file: .env
     environment:
       PORT: 3000
-      DATABASE_URL: postgresql://postgres:${DB_PASSWORD}@db:5432/convention_tickets
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@db:5432/convention_tickets
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
       RESEND_API_KEY: ${RESEND_API_KEY}

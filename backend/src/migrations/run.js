@@ -2,9 +2,24 @@ require('dotenv').config();
 const db = require('../config/database');
 const path = require('path');
 
+async function waitForDb(maxRetries = 30, delayMs = 1000) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      await db.query('SELECT 1');
+      console.log('✓ Database connection established');
+      return;
+    } catch (err) {
+      console.log(`Waiting for database... (attempt ${i + 1}/${maxRetries})`);
+      if (i === maxRetries - 1) throw err;
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+}
+
 async function runMigrations() {
   try {
     console.log('Running migrations...');
+    await waitForDb();
 
     // Create users table
     await db.query(`
