@@ -477,7 +477,15 @@
           </div>
 
           <div class="modal-actions">
-            <button 
+            <button
+              v-if="(authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin')"
+              @click="toggleExhibitorScanStatus"
+              :class="['btn-scan', { scanned: viewingExhibitorOrder.tickets[0].scans?.scanned }]"
+            >
+              <font-awesome-icon :icon="viewingExhibitorOrder.tickets[0].scans?.scanned ? 'times' : 'check'" />
+              {{ viewingExhibitorOrder.tickets[0].scans?.scanned ? 'Unmark Scan' : 'Mark as Scanned' }}
+            </button>
+            <button
               v-if="(authStore.user?.role === 'admin' || authStore.user?.role === 'superadmin') && !viewingExhibitorOrder.tickets[0].email_sent && (!viewingExhibitorOrder.tickets[0].status || viewingExhibitorOrder.tickets[0].status === 'valid')"
               @click="sendTicketEmail(viewingExhibitorOrder.tickets[0].id)"
               class="btn-primary"
@@ -893,22 +901,43 @@ export default {
 
     const toggleScanStatus = async (ticket) => {
       const action = ticket.scans?.scanned ? 'unmark' : 'mark';
-      const confirmMsg = ticket.scans?.scanned 
+      const confirmMsg = ticket.scans?.scanned
         ? 'Mark this ticket as NOT scanned? This will remove the scan record.'
         : 'Mark this ticket as scanned? This will add a scan record with the current timestamp.';
-      
+
       if (!confirm(confirmMsg)) {
-        return;
+        return null;
       }
-      
+
       try {
-        await axios.post(`/api/tickets/${ticket.id}/scan-status`, { action });
-        
+        const response = await axios.post(`/api/tickets/${ticket.id}/scan-status`, { action });
+
         // Reload tickets to get updated scan status
         await loadTickets();
+        return response.data;
       } catch (err) {
         console.error('Error toggling scan status:', err);
         alert('Failed to update scan status. Please try again.');
+        return null;
+      }
+    };
+
+    const toggleExhibitorScanStatus = async () => {
+      if (!viewingExhibitorOrder.value) return;
+      const ticket = viewingExhibitorOrder.value.tickets[0];
+      const result = await toggleScanStatus(ticket);
+      // Patch the modal's local state so the button label and status flip
+      // immediately, since loadTickets() rebuilds the array but viewingExhibitorOrder
+      // still references the original group object.
+      if (result && viewingExhibitorOrder.value) {
+        viewingExhibitorOrder.value.tickets[0].scans = result.scanned
+          ? {
+              scanned: true,
+              scannedOn: result.scannedOn,
+              scannedBy: result.scannedBy
+            }
+          : { scanned: false, scannedOn: null };
+        viewingExhibitorOrder.value.tickets[0].is_used = result.scanned;
       }
     };
 
@@ -1028,6 +1057,7 @@ export default {
       closeExhibitorModal,
       saveTicketEdits,
       toggleScanStatus,
+      toggleExhibitorScanStatus,
       sendTicketEmail,
       sendAllTicketsEmail,
       formatDate,
@@ -1286,6 +1316,8 @@ tr:hover td {
 
 .order-actions {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
 }
 

@@ -1,11 +1,13 @@
 services:
   db:
     image: postgres:15-alpine
-    env_file: .env
     environment:
       POSTGRES_DB: convention_tickets
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_USER: postgres
+      # Use DB_PASSWORD consistently across both apps. No silent default —
+      # if it isn't set, fail fast at compose-up time rather than initialize
+      # the volume with the literal string "password" and lock everyone out.
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     expose:
@@ -26,7 +28,7 @@ services:
     env_file: .env
     environment:
       PORT: 3000
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@db:5432/convention_tickets
+      DATABASE_URL: postgresql://postgres:${DB_PASSWORD:?DB_PASSWORD must be set}@db:5432/convention_tickets
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
       RESEND_API_KEY: ${RESEND_API_KEY}
