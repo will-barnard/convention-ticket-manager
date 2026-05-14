@@ -676,18 +676,46 @@ export default {
             csvContent += `${name},${email},${boothRange},${booths},${supplies},${status},${created},${used}\n`;
           });
         } else if (ticketType === 'attendee') {
-          // Attendee CSV: Name, Email, Ticket Type, Status, Email Sent, Created, Scanned
-          csvContent = 'Name,Email,Ticket Type,Status,Email Sent,Created,Scanned,Scanned On\n';
+          // Attendee CSV: one row per order, with a concat of ticket types/quantities
+          csvContent = 'Name,Email,Order ID,Tickets,Status,Email Sent,Created\n';
+
+          // Group tickets by shopify_order_id (fall back to unique per-ticket key)
+          const orderMap = new Map();
           tickets.forEach(ticket => {
-            const name = `"${ticket.name}"`;
-            const email = ticket.email;
-            const subtype = formatAttendeeSubtype(ticket.ticket_subtype);
-            const status = ticket.status || 'valid';
-            const emailSent = ticket.email_sent ? 'Yes' : 'No';
-            const created = new Date(ticket.created_at).toLocaleDateString();
-            const scanned = ticket.scans?.scanned ? 'Yes' : 'No';
-            const scannedOn = ticket.scans?.scannedOn ? new Date(ticket.scans.scannedOn).toLocaleDateString() : '';
-            csvContent += `${name},${email},"${subtype}",${status},${emailSent},${created},${scanned},"${scannedOn}"\n`;
+            const key = ticket.shopify_order_id || `__single_${ticket.id}`;
+            if (!orderMap.has(key)) {
+              orderMap.set(key, []);
+            }
+            orderMap.get(key).push(ticket);
+          });
+
+          orderMap.forEach((orderTickets, key) => {
+            const first = orderTickets[0];
+            const name = `"${first.name}"`;
+            const email = first.email;
+            const orderId = first.shopify_order_id || '';
+
+            // Count quantities per subtype within this order
+            const subtypeCounts = new Map();
+            orderTickets.forEach(t => {
+              const label = formatAttendeeSubtype(t.ticket_subtype);
+              subtypeCounts.set(label, (subtypeCounts.get(label) || 0) + 1);
+            });
+            const ticketsSummary = Array.from(subtypeCounts.entries())
+              .map(([label, qty]) => `${label} x${qty}`)
+              .join('; ');
+
+            // Use the worst status across the order (cancelled > invalid > valid)
+            const statusPriority = { cancelled: 2, invalid: 1, valid: 0 };
+            const status = orderTickets.reduce((worst, t) => {
+              const s = t.status || 'valid';
+              return (statusPriority[s] ?? 0) > (statusPriority[worst] ?? 0) ? s : worst;
+            }, 'valid');
+
+            const emailSent = orderTickets.some(t => t.email_sent) ? 'Yes' : 'No';
+            const created = new Date(first.created_at).toLocaleDateString();
+
+            csvContent += `${name},${email},"${orderId}","${ticketsSummary}",${status},${emailSent},${created}\n`;
           });
         }
 
