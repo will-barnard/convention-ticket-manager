@@ -638,6 +638,12 @@ router.post('/:id/scan-status', authMiddleware, checkLockdown, async (req, res) 
         [id, req.user.id]
       );
 
+      // Keep is_used in sync for exhibitor/student tickets
+      await db.query(
+        'UPDATE tickets SET is_used = true, used_at = NOW() WHERE id = $1',
+        [id]
+      );
+
       console.log(`✅ Ticket ${id} manually marked as scanned by ${req.user.email}`);
 
       // Get scan date and scanner info
@@ -669,6 +675,12 @@ router.post('/:id/scan-status', authMiddleware, checkLockdown, async (req, res) 
       if (deleteResult.rowCount === 0) {
         return res.status(400).json({ error: 'Ticket was not scanned' });
       }
+
+      // Keep is_used in sync for exhibitor/student tickets
+      await db.query(
+        'UPDATE tickets SET is_used = false, used_at = NULL WHERE id = $1',
+        [id]
+      );
 
       console.log(`❌ Ticket ${id} manually unmarked as scanned by ${req.user.email}`);
 
