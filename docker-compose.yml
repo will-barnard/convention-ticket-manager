@@ -38,7 +38,7 @@ services:
       GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD}
       SHOPIFY_API_KEY: ${SHOPIFY_API_KEY}
       FRONTEND_URL: ${FRONTEND_URL}
-      CORS_ORIGINS: ${CORS_ORIGINS}
+      CORS_ORIGINS: http://chicagodrumshow.com,https://chicagodrumshow.com,https://admin.chicagodrumshow.com,https://scanner.chicagodrumshow.com,https://verifier.chicagodrumshow.com
     expose:
       - "3000"
     depends_on:
