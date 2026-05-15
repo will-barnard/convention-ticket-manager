@@ -12,6 +12,7 @@ console.log('   RESEND_API_KEY:', process.env.RESEND_API_KEY ? `${process.env.RE
 console.log('   EMAIL_FROM:', process.env.EMAIL_FROM || 'NOT SET');
 console.log('   ADMIN_EMAIL:', process.env.ADMIN_EMAIL || 'NOT SET');
 console.log('   FRONTEND_URL:', process.env.FRONTEND_URL || 'NOT SET');
+console.log('   CORS_ORIGINS:', process.env.CORS_ORIGINS || '(not set — falling back to FRONTEND_URL)');
 console.log('');
 const authRoutes = require('./routes/auth');
 const verifierAuthRoutes = require('./routes/verifier-auth');
@@ -33,6 +34,8 @@ const allowedOrigins = (process.env.CORS_ORIGINS || process.env.FRONTEND_URL || 
   .split(',')
   .map(s => s.trim())
   .filter(Boolean);
+
+console.log('🔒 CORS allowed origins:', allowedOrigins.length ? allowedOrigins : '(all origins — no restrictions)');
 
 app.use(cors({
   origin: (origin, cb) => {
