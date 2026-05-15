@@ -26,7 +26,8 @@ function getAllowedDays(subtype) {
     'adult_sunday': ['sunday'],
     'child_2day': ['saturday', 'sunday'],
     'child_saturday': ['saturday'],
-    'child_sunday': ['sunday']
+    'child_sunday': ['sunday'],
+    'cymbal_summit': ['friday']
   };
   return dayMapping[subtype] || [];
 }
