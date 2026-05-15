@@ -180,6 +180,13 @@ router.get('/:uuid', authMiddleware, checkLockdown, async (req, res) => {
       [ticket.id]
     );
 
+    // Record scan so admin dashboard shows correct scanned status
+    const todayUTC = getServerDateUTC();
+    await db.query(
+      'INSERT INTO ticket_scans (ticket_id, scan_date, scanned_by_user_id) VALUES ($1, $2, $3)',
+      [ticket.id, todayUTC, req.user.id]
+    );
+
     res.json({
       status: 'valid',
       message: 'Access granted to the convention',
