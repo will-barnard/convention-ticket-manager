@@ -785,7 +785,10 @@ export default {
 
     const formatScanDate = (date) => {
       if (!date) return '';
-      const d = new Date(date);
+      // Parse only the date portion (YYYY-MM-DD) as local time to avoid UTC midnight
+      // shifting to the previous day in timezones behind UTC.
+      const [year, month, day] = date.toString().substring(0, 10).split('-').map(Number);
+      const d = new Date(year, month - 1, day);
       const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       return `${days[d.getDay()]}, ${months[d.getMonth()]} ${d.getDate()}`;
