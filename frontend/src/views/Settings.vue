@@ -677,7 +677,7 @@ export default {
           });
         } else if (ticketType === 'attendee') {
           // Attendee CSV: one row per order, with a concat of ticket types/quantities
-          csvContent = 'Name,Email,Order ID,Tickets,Status,Email Sent,Created\n';
+          csvContent = 'Name,Email,Order ID,Tickets,Status,Email Sent,Created,Checked In\n';
 
           // Group tickets by shopify_order_id (fall back to unique per-ticket key)
           const orderMap = new Map();
@@ -714,8 +714,9 @@ export default {
 
             const emailSent = orderTickets.some(t => t.email_sent) ? 'Yes' : 'No';
             const created = new Date(first.created_at).toLocaleDateString();
+            const checkedIn = orderTickets.some(t => t.scans?.scanned) ? 'Yes' : 'No';
 
-            csvContent += `${name},${email},"${orderId}","${ticketsSummary}",${status},${emailSent},${created}\n`;
+            csvContent += `${name},${email},"${orderId}","${ticketsSummary}",${status},${emailSent},${created},${checkedIn}\n`;
           });
         }
 
