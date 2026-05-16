@@ -352,13 +352,25 @@
             <font-awesome-icon icon="graduation-cap" />
             Download Student Tickets CSV
           </button>
+          <button @click="downloadRemainingCSV('student')" class="btn-export btn-export-remaining">
+            <font-awesome-icon icon="graduation-cap" />
+            Download Remaining Students CSV
+          </button>
           <button @click="downloadCSV('exhibitor')" class="btn-export">
             <font-awesome-icon icon="building" />
             Download Exhibitor Tickets CSV
           </button>
+          <button @click="downloadRemainingCSV('exhibitor')" class="btn-export btn-export-remaining">
+            <font-awesome-icon icon="building" />
+            Download Remaining Exhibitors CSV
+          </button>
           <button @click="downloadCSV('attendee')" class="btn-export">
             <font-awesome-icon icon="calendar-day" />
             Download Attendee Tickets CSV
+          </button>
+          <button @click="downloadRemainingCSV('attendee')" class="btn-export btn-export-remaining">
+            <font-awesome-icon icon="calendar-day" />
+            Download Remaining Attendees CSV
           </button>
           <button @click="downloadNoEmailTickets" class="btn-export">
             <font-awesome-icon icon="envelope-open" />
@@ -737,6 +749,111 @@ export default {
       }
     };
 
+    const downloadRemainingCSV = async (ticketType) => {
+      try {
+        const response = await axios.get('/api/tickets');
+        const allTickets = response.data.tickets || response.data;
+        const tickets = allTickets.filter(t => t.ticket_type === ticketType);
+
+        let remaining;
+        let csvContent = '';
+        const timestamp = new Date().toISOString().split('T')[0];
+
+        if (ticketType === 'attendee') {
+          // Group by order, keep orders where NO ticket has been scanned
+          const orderMap = new Map();
+          tickets.forEach(ticket => {
+            const key = ticket.shopify_order_id || `__single_${ticket.id}`;
+            if (!orderMap.has(key)) orderMap.set(key, []);
+            orderMap.get(key).push(ticket);
+          });
+
+          const remainingOrders = [];
+          orderMap.forEach((orderTickets) => {
+            if (!orderTickets.some(t => t.scans?.scanned)) {
+              remainingOrders.push(orderTickets);
+            }
+          });
+
+          if (remainingOrders.length === 0) {
+            alert('No remaining attendee orders to export.');
+            return;
+          }
+
+          csvContent = 'Name,Email,Order ID,Tickets,Status,Email Sent,Created\n';
+          remainingOrders.forEach(orderTickets => {
+            const first = orderTickets[0];
+            const name = `"${first.name}"`;
+            const email = first.email;
+            const orderId = first.shopify_order_id || '';
+            const subtypeCounts = new Map();
+            orderTickets.forEach(t => {
+              const label = formatAttendeeSubtype(t.ticket_subtype);
+              subtypeCounts.set(label, (subtypeCounts.get(label) || 0) + 1);
+            });
+            const ticketsSummary = Array.from(subtypeCounts.entries())
+              .map(([label, qty]) => `${label} x${qty}`).join('; ');
+            const statusPriority = { cancelled: 2, invalid: 1, valid: 0 };
+            const status = orderTickets.reduce((worst, t) => {
+              const s = t.status || 'valid';
+              return (statusPriority[s] ?? 0) > (statusPriority[worst] ?? 0) ? s : worst;
+            }, 'valid');
+            const emailSent = orderTickets.some(t => t.email_sent) ? 'Yes' : 'No';
+            const created = new Date(first.created_at).toLocaleDateString();
+            csvContent += `${name},${email},"${orderId}","${ticketsSummary}",${status},${emailSent},${created}\n`;
+          });
+        } else if (ticketType === 'student') {
+          remaining = tickets.filter(t => !t.is_used);
+          if (remaining.length === 0) {
+            alert('No remaining student tickets to export.');
+            return;
+          }
+          csvContent = 'Name,Email,Teacher,Status,Email Sent,Created\n';
+          remaining.forEach(ticket => {
+            const name = `"${ticket.name}"`;
+            const email = ticket.email;
+            const teacher = `"${ticket.teacher_name || ''}"`;
+            const status = ticket.status || 'valid';
+            const emailSent = ticket.email_sent ? 'Yes' : 'No';
+            const created = new Date(ticket.created_at).toLocaleDateString();
+            csvContent += `${name},${email},${teacher},${status},${emailSent},${created}\n`;
+          });
+        } else if (ticketType === 'exhibitor') {
+          remaining = tickets.filter(t => !t.is_used);
+          if (remaining.length === 0) {
+            alert('No remaining exhibitor tickets to export.');
+            return;
+          }
+          csvContent = 'Name,Email,Booth Range,Booths,Supplies,Status,Created\n';
+          remaining.forEach(ticket => {
+            const name = `"${ticket.name}"`;
+            const email = ticket.email;
+            const boothRange = ticket.booth_range ? `"${ticket.booth_range}"` : '""';
+            const booths = ticket.quantity || 1;
+            const supplies = ticket.supplies
+              ? `"${ticket.supplies.map(s => `${s.name} (${s.quantity})`).join('; ')}"`
+              : '""';
+            const status = ticket.status || 'valid';
+            const created = new Date(ticket.created_at).toLocaleDateString();
+            csvContent += `${name},${email},${boothRange},${booths},${supplies},${status},${created}\n`;
+          });
+        }
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', `${ticketType}-remaining-${timestamp}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch (error) {
+        console.error('Error downloading remaining CSV:', error);
+        alert('Failed to download CSV. Please try again.');
+      }
+    };
+
     const downloadNoEmailTickets = async () => {
       try {
         const response = await axios.get('/api/settings/export-no-email-tickets', {
@@ -1079,6 +1196,7 @@ export default {
       getLogoUrl,
       batchSendEmails,
       downloadCSV,
+      downloadRemainingCSV,
       downloadNoEmailTickets,
       downloadPostConventionReport,
       confirmResetDatabase,
@@ -1457,6 +1575,15 @@ export default {
 
 .btn-report:hover {
   box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4);
+}
+
+.btn-export-remaining {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  box-shadow: 0 2px 8px rgba(245, 87, 108, 0.3);
+}
+
+.btn-export-remaining:hover {
+  box-shadow: 0 4px 12px rgba(245, 87, 108, 0.4);
 }
 
 @media (min-width: 768px) {
